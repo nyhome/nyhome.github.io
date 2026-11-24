@@ -1,0 +1,49 @@
+.page {
+  display: grid;
+  gap: 28px;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 40px var(--gutter) 80px;
+}
+
+.home {
+  color: var(--olive-soft);
+  font-size: 0.9375rem;
+  text-decoration: none;
+}
+
+.ready {
+  display: grid;
+  gap: 18px;
+}
+
+.title {
+  font-size: clamp(2rem, 6vw, 2.8rem);
+  line-height: 1.05;
+}
+
+.lead {
+  font-size: 1.0625rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.alert {
+  padding: 12px 14px;
+  border-radius: 4px;
+  background: var(--olive-light);
+}
+
+.inline {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}

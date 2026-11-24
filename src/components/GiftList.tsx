@@ -1,22 +1,44 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import type { Gift, Room, RoomId } from "@/data/gifts";
+import type { Delivery, Gift, Room, RoomId } from "@/data/gifts";
 import type { PriceRangeId } from "@/lib/catalog";
+import { fetchDelivery, fetchGifts } from "@/lib/firebase";
 import { Catalog } from "./Catalog";
 import { GiftDialog } from "./GiftDialog";
 import { Rooms } from "./Rooms";
 
-/** Owns the preview's state: filters, the open gift, and in-memory reservations. */
-export function GiftList({ rooms, initialGifts }: { rooms: Room[]; initialGifts: Gift[] }) {
-  const [gifts, setGifts] = useState(initialGifts);
+/** Owns the page state: the gifts from Firestore, filters and the open gift. */
+export function GiftList({ rooms }: { rooms: Room[] }) {
+  const [gifts, setGifts] = useState<Gift[] | null>(null);
+  const [delivery, setDelivery] = useState<Delivery | null>(null);
+  const [now, setNow] = useState(0);
+  const [failed, setFailed] = useState(false);
   const [room, setRoom] = useState<RoomId | "todos">("todos");
   const [price, setPrice] = useState<PriceRangeId>("todos");
   const [openId, setOpenId] = useState<string | null>(null);
   const trigger = useRef<HTMLElement | null>(null);
 
-  const open = gifts.find((g) => g.id === openId) ?? null;
+  const load = useCallback(
+    () =>
+      Promise.all([fetchGifts(), fetchDelivery()])
+        .then(([g, d]) => {
+          setGifts(g);
+          setDelivery(d);
+          setNow(Date.now());
+          setFailed(false);
+        })
+        .catch(() => setFailed(true)),
+    [],
+  );
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const list = gifts ?? [];
+  const open = list.find((g) => g.id === openId) ?? null;
 
   // A room's "Ver presentes": clear the filters so that room's group exists, then jump to it.
   const showGifts = (id: RoomId) => {
@@ -38,10 +60,13 @@ export function GiftList({ rooms, initialGifts }: { rooms: Room[]; initialGifts:
 
   return (
     <>
-      <Rooms rooms={rooms} gifts={gifts} onShowGifts={showGifts} />
+      <Rooms rooms={rooms} gifts={list} onShowGifts={showGifts} />
       <Catalog
         rooms={rooms}
-        gifts={gifts}
+        gifts={list}
+        now={now}
+        status={failed ? "error" : gifts === null ? "loading" : "ready"}
+        onRetry={load}
         room={room}
         price={price}
         onRoomChange={setRoom}
@@ -51,11 +76,7 @@ export function GiftList({ rooms, initialGifts }: { rooms: Room[]; initialGifts:
           setOpenId(g.id);
         }}
       />
-      <GiftDialog
-        gift={open}
-        onClose={close}
-        onReserve={(g) => setGifts((list) => list.map((x) => (x.id === g.id ? { ...x, status: "reserved" } : x)))}
-      />
+      <GiftDialog gift={open} now={now} delivery={delivery} onClose={close} onChanged={load} />
     </>
   );
 }

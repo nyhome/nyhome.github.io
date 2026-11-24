@@ -1,36 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Casa N&Y · Lista de presentes
 
-## Getting Started
+Site estático (Next.js `output: "export"`) publicado no GitHub Pages em `nyhome.github.io`. Os dados ficam no Firestore (plano Spark, grátis), lido e escrito direto do navegador. Toda a segurança está em [`firestore.rules`](firestore.rules).
 
-First, run the development server:
+- `/`: o catálogo. Convidados reservam por 72h com nome, e-mail e parentesco. Item reservado ou comprado aparece como esgotado, com "Presente de Maria · Prima" ou "Dos noivos".
+- `/reserva?t=…`: o link pessoal do convidado, com os botões **Já comprei** e **Desistir**.
+- `/admin`: o painel dos noivos (login com Google). Dá pra adicionar, editar, publicar, marcar comprado, "comprado por nós", liberar reserva, corrigir parentesco e editar o endereço de entrega.
+- `scripts/mailer.mjs`: roda a cada 15 min no GitHub Actions ([`mailer.yml`](.github/workflows/mailer.yml)). Manda o e-mail de reserva, o lembrete de 48h, o aviso de expiração em 72h (e devolve o presente pra lista) e o aviso de compra para os noivos, tudo pelo Gmail.
+- `scripts/importar.mjs`: transforma links de anúncio em rascunhos (Playwright + Ollama local).
+
+## Desenvolvimento local
+
+Precisa de Java no PATH (o emulador do Firestore usa): `brew install openjdk` e `export PATH=/opt/homebrew/opt/openjdk/bin:$PATH`.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run emulators                                    # Firestore :8177 + Auth :9099
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8177 npm run seed  # presentes e reservas de exemplo
+NEXT_PUBLIC_EMULATOR=1 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+No emulador, o login Google abre uma tela falsa de contas. Os UIDs de admin nas regras (`ADMIN_UID_1`/`ADMIN_UID_2`) valem enquanto não forem trocados pelos reais.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm test             # catálogo, mailer e importador
+npm run test:rules   # regras de segurança no emulador
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8177 DRY_RUN=1 ADMIN_EMAILS=a@b.c npm run mailer   # e-mails sem enviar
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Importar anúncios
 
-## Learn More
+```bash
+brew install ollama && ollama serve &   # uma vez
+ollama pull qwen2.5:7b                  # ~4,7 GB
+npm run importar -- --dry <url>         # só mostra o que extraiu
+npm run importar -- <url> <url> ...     # salva como rascunho (precisa do service-account.json)
+```
 
-To learn more about Next.js, take a look at the following resources:
+O navegador abre de verdade. Se a loja pedir login ou captcha, resolva lá e aperte Enter no terminal; o perfil fica salvo em `.playwright-profile/`. Depois revise o rascunho em `/admin` e publique.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Produção
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. **Admins:** entre em `/admin` com cada conta Google; a tela mostra o UID. Troque `ADMIN_UID_1`/`ADMIN_UID_2` em `firestore.rules` e em `src/lib/firebase.ts` e rode `npx firebase deploy --only firestore:rules`.
+2. **Variável do repositório (pública):** `NEXT_PUBLIC_FIREBASE_CONFIG`, com o JSON de `npx firebase apps:sdkconfig WEB`.
+3. **Variável:** `SITE_URL=https://nyhome.github.io`.
+4. **Secrets:** `FIREBASE_SERVICE_ACCOUNT` (o JSON da service account), `GMAIL_USER`, `GMAIL_APP_PASSWORD` (senha de app; exige verificação em 2 etapas) e `ADMIN_EMAILS` (os dois e-mails, separados por vírgula).
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+O cron do GitHub atrasa às vezes, e é desligado depois de 60 dias sem commit no repo; qualquer push religa.

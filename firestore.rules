@@ -1,0 +1,133 @@
+rules_version = '2';
+
+// Guests have no account. A reservation's id is a random UUID the guest's browser makes and keeps
+// (it goes in their personal link): knowing it is the proof of ownership. Every guest write is a
+// batch, and each document's rule checks the others with get() (state before) / getAfter() (after).
+//   reserve  = create reservations/{token} + set giftLocks/{giftId} + update gifts/{giftId}
+//   confirm  = update reservations/{token} (bought)   + update gifts/{giftId} (bought)
+//   give up  = update reservations/{token} (released) + update gifts/{giftId} (available)
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    function isAdmin() {
+      return request.auth != null && request.auth.uid in ['lEYtbTBbpfXaUdzz7sQq05Qz1c32', 'ADMIN_UID_2'];
+    }
+
+    // Same 72h as HOLD_HOURS in src/lib/catalog.ts and HOLD_MS in scripts/mailer.mjs.
+    function hold() { return duration.value(72, 'h'); }
+
+    function giftPath(id) { return /databases/$(db)/documents/gifts/$(id); }
+    function lockPath(id) { return /databases/$(db)/documents/giftLocks/$(id); }
+    function resPath(t) { return /databases/$(db)/documents/reservations/$(t); }
+
+    // Open to a new reservation: available, or reserved with the hold already over.
+    function reservable(g) {
+      return g.status == 'available'
+        || (g.status == 'reserved' && g.reservedAt + hold() < request.time);
+    }
+
+    // Same list as TIERS in src/data/gifts.ts.
+    function tiers() {
+      return ['Amigo', 'Amiga', 'Família', 'Pai', 'Mãe', 'Irmão', 'Irmã', 'Avô', 'Avó',
+              'Tio', 'Tia', 'Primo', 'Prima', 'Padrinho', 'Madrinha'];
+    }
+
+    match /gifts/{giftId} {
+      function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+
+      function guestReserve() {
+        let after = request.resource.data;
+        let tok = getAfter(lockPath(giftId)).data.token;
+        let res = getAfter(resPath(tok)).data;
+        return reservable(resource.data)
+          && changed().hasOnly(['status', 'reservedAt', 'giverName', 'giverTier'])
+          && after.status == 'reserved'
+          && after.reservedAt == request.time
+          && after.giverName is string && after.giverName.size() > 0 && after.giverName.size() <= 30
+          && after.giverTier == res.tier
+          && res.giftId == giftId && res.status == 'reserved' && res.reservedAt == request.time;
+      }
+
+      // The lock is read as it was BEFORE the batch, so swapping it in the same batch doesn't help.
+      function guestClose() {
+        let after = request.resource.data;
+        let tok = get(lockPath(giftId)).data.token;
+        let before = get(resPath(tok)).data;
+        let res = getAfter(resPath(tok)).data;
+        return resource.data.status == 'reserved'
+          && before.status == 'reserved' && before.giftId == giftId
+          && (
+            (after.status == 'bought' && res.status == 'bought' && changed().hasOnly(['status']))
+            || (after.status == 'available' && res.status == 'released'
+                && changed().hasOnly(['status', 'reservedAt', 'giverName', 'giverTier'])
+                && after.reservedAt == null && after.giverName == null && after.giverTier == null)
+          );
+      }
+
+      allow read: if isAdmin() || resource.data.status in ['available', 'reserved', 'bought'];
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || guestReserve() || guestClose();
+    }
+
+    // Who holds each gift. Nobody but admins can read it, so the token never leaks through a gift.
+    match /giftLocks/{giftId} {
+      allow read, delete: if isAdmin();
+      allow create, update: if isAdmin() || (
+        request.resource.data.keys().hasOnly(['token'])
+        && request.resource.data.token is string
+        && reservable(get(giftPath(giftId)).data)
+        && getAfter(giftPath(giftId)).data.status == 'reserved'
+        && getAfter(giftPath(giftId)).data.reservedAt == request.time
+        && getAfter(resPath(request.resource.data.token)).data.giftId == giftId
+        && getAfter(resPath(request.resource.data.token)).data.reservedAt == request.time
+      );
+    }
+
+    match /reservations/{token} {
+      function fields() {
+        return ['giftId', 'name', 'email', 'tier', 'status', 'reservedAt', 'adminNotified'];
+      }
+
+      // The id is the secret: fetching by id is fine, listing is not.
+      allow get: if true;
+      allow list, delete: if isAdmin();
+
+      allow create: if isAdmin() || (
+        token.matches('^[0-9a-f-]{36}$')
+        && request.resource.data.keys().hasOnly(fields())
+        && request.resource.data.keys().hasAll(fields())
+        && request.resource.data.giftId is string
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60
+        && request.resource.data.email is string && request.resource.data.email.size() <= 120
+        && request.resource.data.email.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$')
+        && request.resource.data.tier in tiers()
+        && request.resource.data.status == 'reserved'
+        && request.resource.data.reservedAt == request.time
+        && request.resource.data.adminNotified == false
+        && getAfter(lockPath(request.resource.data.giftId)).data.token == token
+        && getAfter(giftPath(request.resource.data.giftId)).data.status == 'reserved'
+        && getAfter(giftPath(request.resource.data.giftId)).data.reservedAt == request.time
+      );
+
+      allow update: if isAdmin() || (
+        resource.data.status == 'reserved'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'closedAt'])
+        && request.resource.data.closedAt == request.time
+        && get(lockPath(resource.data.giftId)).data.token == token
+        && get(giftPath(resource.data.giftId)).data.status == 'reserved'
+        && (
+          (request.resource.data.status == 'bought'
+            && getAfter(giftPath(resource.data.giftId)).data.status == 'bought')
+          || (request.resource.data.status == 'released'
+            && getAfter(giftPath(resource.data.giftId)).data.status == 'available')
+        )
+      );
+    }
+
+    match /settings/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

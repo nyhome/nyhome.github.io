@@ -3,25 +3,33 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@astryxdesign/core/Button";
 import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog";
+import { Selector } from "@astryxdesign/core/Selector";
 import { TextInput } from "@astryxdesign/core/TextInput";
-import type { Gift } from "@/data/gifts";
-import { formatBRL } from "@/lib/catalog";
+import { TIERS, type Delivery, type Gift } from "@/data/gifts";
+import { HOLD_HOURS, formatBRL, giverLabel, holdEnds, isSoldOut } from "@/lib/catalog";
+import { reserveGift } from "@/lib/firebase";
 import { useIsNarrow } from "@/lib/hooks";
+import { CopyButton } from "./CopyButton";
 import { Gallery } from "./Gallery";
+import { DeliveryNote, ModelBox, StoreLinks } from "./GiftInfo";
 import styles from "./GiftDialog.module.css";
 
-const HOURS = 72;
-
 type Step = { kind: "details" } | { kind: "reserve" } | { kind: "done"; guest: string; until: Date; link: string };
+type Errors = Partial<Record<"name" | "email" | "tier" | "form" | "race", string>>;
+
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 interface Props {
   gift: Gift | null;
+  now: number;
+  delivery: Delivery | null;
   onClose: () => void;
-  onReserve: (gift: Gift) => void;
+  /** After a reservation (or a lost race), so the list reloads. */
+  onChanged: () => void;
 }
 
 /** Details, then the reservation form in the same dialog, then the confirmation with the personal link. */
-export function GiftDialog({ gift, onClose, onReserve }: Props) {
+export function GiftDialog({ gift, now, delivery, onClose, onChanged }: Props) {
   const narrow = useIsNarrow();
   return (
     <Dialog
@@ -33,34 +41,59 @@ export function GiftDialog({ gift, onClose, onReserve }: Props) {
       purpose="form"
     >
       {/* Keyed by gift so each opening starts on the details step with an empty form. */}
-      {gift && <Content key={gift.id} gift={gift} onClose={onClose} onReserve={onReserve} />}
+      {gift && <Content key={gift.id} gift={gift} now={now} delivery={delivery} onClose={onClose} onChanged={onChanged} />}
     </Dialog>
   );
 }
 
-function Content({ gift, onClose, onReserve }: { gift: Gift; onClose: () => void; onReserve: (gift: Gift) => void }) {
+function Content({ gift, now, delivery, onClose, onChanged }: Omit<Props, "gift"> & { gift: Gift }) {
   const [step, setStep] = useState<Step>({ kind: "details" });
   const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [email, setEmail] = useState("");
+  const [tier, setTier] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Errors>({});
+  const [busy, setBusy] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const soldOut = isSoldOut(gift, now);
 
   // The reserve button that had focus is gone; put the guest straight into the name field.
   useEffect(() => {
     if (step.kind === "reserve") formRef.current?.querySelector("input")?.focus();
   }, [step.kind]);
 
-  const submit = (e?: React.FormEvent) => {
+  const submit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const guest = name.trim();
-    if (!guest) {
-      setError("Informe seu nome para reservar.");
-      return;
+    const next: Errors = {};
+    if (!guest) next.name = "Informe seu nome para reservar.";
+    else if (guest.length > 60) next.name = "Use até 60 caracteres.";
+    if (!EMAIL.test(email.trim())) next.email = "Informe um e-mail válido. É para lá que vai o seu link.";
+    if (!tier) next.tier = "Escolha uma opção.";
+    setErrors(next);
+    if (Object.keys(next).length) return;
+
+    setBusy(true);
+    try {
+      const token = await reserveGift(gift.id, { name: guest, email, tier: tier! });
+      setStep({
+        kind: "done",
+        guest,
+        until: new Date(Date.now() + HOLD_HOURS * 3600_000),
+        link: `${window.location.origin}/reserva?t=${token}`,
+      });
+    } catch (err) {
+      // The form is validated above, so a refusal by the rules means someone else got there first.
+      const denied = (err as { code?: string }).code === "permission-denied";
+      setErrors({
+        form: denied
+          ? "Alguém acabou de reservar este presente. A lista foi atualizada."
+          : "Não conseguimos reservar agora. Confira sua conexão e tente de novo.",
+        race: denied ? "1" : undefined,
+      });
+    } finally {
+      setBusy(false);
+      onChanged();
     }
-    // shortcut: the preview reserves in memory; the real flow is an atomic insert in Supabase with a server-made token
-    const token = crypto.randomUUID().replaceAll("-", "").slice(0, 16);
-    onReserve(gift);
-    setStep({ kind: "done", guest, until: new Date(Date.now() + HOURS * 3600_000), link: `${window.location.origin}/reserva/${token}` });
   };
 
   const back =
@@ -70,11 +103,13 @@ function Content({ gift, onClose, onReserve }: { gift: Gift; onClose: () => void
       </Button>
     ) : undefined;
 
+  const ends = holdEnds(gift);
+
   return (
     <>
       <DialogHeader
         title={step.kind === "done" ? "Presente reservado" : gift.name}
-        subtitle={step.kind === "done" ? gift.name : `${gift.store}, ${formatBRL(gift.price)}`}
+        subtitle={step.kind === "done" ? gift.name : formatBRL(gift.price)}
         onOpenChange={(open) => !open && onClose()}
         startContent={back}
       />
@@ -86,29 +121,32 @@ function Content({ gift, onClose, onReserve }: { gift: Gift; onClose: () => void
               <p className={styles.price}>{formatBRL(gift.price)}</p>
               <p className={styles.note}>Preço de referência. Confira o valor e o estoque na loja.</p>
               {gift.description && <p className={styles.description}>{gift.description}</p>}
-              <dl className={styles.spec}>
-                {gift.brand && (<><dt>Marca</dt><dd>{gift.brand}</dd></>)}
-                {gift.model && (<><dt>Modelo</dt><dd>{gift.model}</dd></>)}
-                {gift.dims && (<><dt>Medidas</dt><dd>{gift.dims}</dd></>)}
-                {gift.variants && (<><dt>Variantes</dt><dd>{gift.variants.join(", ")}</dd></>)}
-                <dt>Loja</dt>
-                <dd>{gift.store}</dd>
-              </dl>
-              {gift.status === "reserved" ? (
+              <ModelBox gift={gift} />
+              {(gift.brand || gift.dims || gift.variants) && (
+                <dl className={styles.spec}>
+                  {gift.brand && (<><dt>Marca</dt><dd>{gift.brand}</dd></>)}
+                  {gift.dims && (<><dt>Medidas</dt><dd>{gift.dims}</dd></>)}
+                  {gift.variants && (<><dt>Variantes</dt><dd>{gift.variants.join(", ")}</dd></>)}
+                </dl>
+              )}
+              <StoreLinks gift={gift} />
+              {soldOut && (
                 <p className={styles.reserved}>
-                  Outro convidado reservou este presente. Ele volta para a lista se a compra não for confirmada em {HOURS} horas.
+                  {gift.status === "bought"
+                    ? `Este presente já foi dado${giverLabel(gift) ? ` (${giverLabel(gift)})` : ""}. Obrigado!`
+                    : `Outro convidado reservou este presente. Se a compra não for confirmada até ${fmt(new Date(ends!))}, ele volta para a lista.`}
                 </p>
-              ) : null}
+              )}
               <div className={styles.actions}>
                 <Button
-                  label="Reservar presente"
+                  label={soldOut ? "Esgotado" : "Reservar presente"}
                   variant="primary"
                   size="lg"
-                  isDisabled={gift.status !== "available"}
+                  isDisabled={soldOut}
                   onClick={() => setStep({ kind: "reserve" })}
                 />
-                <Button label="Ver na loja" variant="secondary" size="lg" href={gift.url} target="_blank" rel="noopener noreferrer" />
               </div>
+              <DeliveryNote delivery={delivery} />
             </div>
           </div>
         )}
@@ -116,22 +154,54 @@ function Content({ gift, onClose, onReserve }: { gift: Gift; onClose: () => void
         {step.kind === "reserve" && (
           <form ref={formRef} className={styles.form} onSubmit={submit} noValidate>
             <p className={styles.lead}>
-              Informe seu nome. O presente fica reservado para você por {HOURS} horas, tempo para comprar na loja e marcar
-              <strong> Já comprei</strong>.
+              O presente fica reservado para você por {HOLD_HOURS} horas, tempo para comprar na loja e marcar
+              <strong> Já comprei</strong> pelo link que enviamos para o seu e-mail.
             </p>
             <TextInput
               label="Seu nome"
               value={name}
               onChange={(v) => {
                 setName(v);
-                if (error) setError(null);
+                if (errors.name) setErrors({ ...errors, name: undefined });
               }}
               isRequired
               size="lg"
-              status={error ? { type: "error", message: error } : undefined}
+              autoComplete="name"
+              status={errors.name ? { type: "error", message: errors.name } : undefined}
             />
+            <TextInput
+              label="Seu e-mail"
+              type="email"
+              value={email}
+              onChange={(v) => {
+                setEmail(v);
+                if (errors.email) setErrors({ ...errors, email: undefined });
+              }}
+              isRequired
+              size="lg"
+              autoComplete="email"
+              status={errors.email ? { type: "error", message: errors.email } : undefined}
+            />
+            <Selector
+              label="Você é..."
+              size="lg"
+              placeholder="Escolha"
+              options={TIERS.map((t) => ({ value: t, label: t }))}
+              value={tier ?? undefined}
+              onChange={(v) => {
+                setTier(v);
+                if (errors.tier) setErrors({ ...errors, tier: undefined });
+              }}
+              status={errors.tier ? { type: "error", message: errors.tier } : undefined}
+            />
+            <p className={styles.note}>
+              Seu primeiro nome e o parentesco aparecem na lista para os outros convidados, como “Presente de{" "}
+              {name.trim() ? name.trim().split(/\s+/)[0] : "Maria"}
+              {tier ? ` · ${tier}` : " · Prima"}”.
+            </p>
+            {errors.form && <p className={styles.reserved} role="alert">{errors.form}</p>}
             <div className={styles.actions}>
-              <Button label="Confirmar reserva" variant="primary" size="lg" type="submit" />
+              <Button label="Confirmar reserva" variant="primary" size="lg" type="submit" isLoading={busy} isDisabled={!!errors.race} />
               <Button label="Voltar aos detalhes" variant="ghost" size="lg" onClick={() => setStep({ kind: "details" })} />
             </div>
           </form>
@@ -140,26 +210,19 @@ function Content({ gift, onClose, onReserve }: { gift: Gift; onClose: () => void
         {step.kind === "done" && (
           <div className={styles.done}>
             <p className={styles.lead}>
-              Está reservado para <strong>{step.guest}</strong> até{" "}
-              {step.until.toLocaleString("pt-BR", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}.
-              Compre na loja e depois volte pelo seu link para marcar <strong>Já comprei</strong> ou liberar o presente.
+              Está reservado para <strong>{step.guest}</strong> até {fmt(step.until)}. Compre na loja e depois volte pelo
+              seu link para marcar <strong>Já comprei</strong> ou desistir do presente.
             </p>
             <div className={styles.linkBox}>
               <span className={styles.linkLabel}>Seu link pessoal</span>
               <code className={styles.link}>{step.link}</code>
-              <Button
-                label={copied ? "Link copiado" : "Copiar link"}
-                variant="secondary"
-                size="sm"
-                onClick={async () => {
-                  await navigator.clipboard.writeText(step.link);
-                  setCopied(true);
-                }}
-              />
+              <CopyButton text={step.link} label="Copiar link" copiedLabel="Link copiado" />
             </div>
-            <p className={styles.note}>Prévia: o link pessoal passa a funcionar quando as reservas forem salvas no banco.</p>
+            <p className={styles.note}>Enviamos este link para o seu e-mail em alguns minutos. Guarde-o: é só com ele que você confirma a compra.</p>
+            <ModelBox gift={gift} />
+            <StoreLinks gift={gift} />
+            <DeliveryNote delivery={delivery} />
             <div className={styles.actions}>
-              <Button label="Ir para a loja" variant="primary" size="lg" href={gift.url} target="_blank" rel="noopener noreferrer" />
               <Button label="Voltar à lista" variant="ghost" size="lg" onClick={onClose} />
             </div>
           </div>
@@ -168,3 +231,6 @@ function Content({ gift, onClose, onReserve }: { gift: Gift; onClose: () => void
     </>
   );
 }
+
+export const fmt = (d: Date) =>
+  d.toLocaleString("pt-BR", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });

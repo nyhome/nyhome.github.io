@@ -77,3 +77,8 @@ export function useSeenOnce(ref: RefObject<Element | null>, rootMargin = "0px 0p
   }, [ref, rootMargin, seen]);
   return seen;
 }
+
+/** onError for store photos: a dead image URL leaves the frame's background instead of a broken-image icon. */
+export const hide = (e: React.SyntheticEvent<HTMLImageElement>) => {
+  e.currentTarget.style.visibility = "hidden";
+};

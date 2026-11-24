@@ -1,0 +1,92 @@
+.label {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.box,
+.stores {
+  display: grid;
+  gap: 8px;
+}
+
+.box {
+  padding: 14px 16px;
+  border-radius: 4px;
+  background: var(--olive-light);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.model {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.storeList {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--color-border);
+}
+
+.store {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.storeName {
+  flex: 1;
+  font-weight: 500;
+}
+
+.coupon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.coupon code {
+  padding: 2px 8px;
+  border: 1px dashed var(--terracotta);
+  border-radius: 3px;
+  color: var(--olive);
+  font-weight: 500;
+}
+
+.delivery {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+}
+
+.deliveryTitle {
+  font-family: var(--font-family-heading);
+  font-size: 1.25rem;
+  font-weight: 400;
+}
+
+.address {
+  font-style: normal;
+  white-space: pre-line;
+}

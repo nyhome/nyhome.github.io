@@ -28,8 +28,14 @@
   scroll-snap-align: start;
 }
 
+/* Store photos are usually product shots on white: show the whole product. */
 .slide img {
-  object-fit: cover;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #fff;
 }
 
 .arrow {
@@ -65,7 +71,12 @@
 }
 
 .thumb img {
-  object-fit: cover;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #fff;
 }
 
 .thumb[aria-current="true"] {

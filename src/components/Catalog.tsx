@@ -12,6 +12,9 @@ import styles from "./Catalog.module.css";
 interface Props {
   rooms: Room[];
   gifts: Gift[];
+  now: number;
+  status: "loading" | "error" | "ready";
+  onRetry: () => void;
   room: RoomId | "todos";
   price: PriceRangeId;
   onRoomChange: (room: RoomId | "todos") => void;
@@ -20,9 +23,9 @@ interface Props {
 }
 
 /** Level 2: the gifts, grouped by room, each card drawing itself in as it scrolls into view. */
-export function Catalog({ rooms, gifts, room, price, onRoomChange, onPriceChange, onOpen }: Props) {
+export function Catalog({ rooms, gifts, now, status, onRetry, room, price, onRoomChange, onPriceChange, onOpen }: Props) {
   const narrow = useIsNarrow();
-  const shown = visibleGifts(gifts, room, price);
+  const shown = visibleGifts(gifts, room, price, now);
   const groups = rooms
     .filter((r) => room === "todos" || r.id === room)
     .map((r) => ({ room: r, gifts: shown.filter((g) => g.room === r.id) }))
@@ -72,7 +75,22 @@ export function Catalog({ rooms, gifts, room, price, onRoomChange, onPriceChange
         </div>
       </div>
 
-      {groups.length === 0 ? (
+      {status === "loading" ? (
+        <div className={styles.empty}>
+          <p>Carregando a lista…</p>
+        </div>
+      ) : status === "error" ? (
+        <div className={styles.empty}>
+          <p>Não conseguimos carregar a lista agora.</p>
+          <button type="button" className={styles.reset} onClick={onRetry}>
+            Tentar de novo
+          </button>
+        </div>
+      ) : gifts.length === 0 ? (
+        <div className={styles.empty}>
+          <p>A lista ainda está sendo montada. Volte daqui a pouco.</p>
+        </div>
+      ) : groups.length === 0 ? (
         <div className={styles.empty}>
           <p>Nenhum presente disponível nessa faixa de preço.</p>
           <button type="button" className={styles.reset} onClick={() => onPriceChange("todos")}>
@@ -88,7 +106,7 @@ export function Catalog({ rooms, gifts, room, price, onRoomChange, onPriceChange
             </div>
             <div className={styles.grid}>
               {list.map((g, i) => (
-                <GiftCard key={g.id} gift={g} order={i} onOpen={onOpen} />
+                <GiftCard key={g.id} gift={g} now={now} order={i} onOpen={onOpen} />
               ))}
             </div>
           </div>

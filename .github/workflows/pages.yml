@@ -20,6 +20,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          # Public Firebase web config (JSON from `firebase apps:sdkconfig`); a repo variable, not a secret.
+          NEXT_PUBLIC_FIREBASE_CONFIG: ${{ vars.NEXT_PUBLIC_FIREBASE_CONFIG }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: out

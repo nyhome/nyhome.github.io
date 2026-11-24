@@ -1,10 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import { useRef, useState } from "react";
 import { IconButton } from "@astryxdesign/core/IconButton";
-import type { Photo } from "@/data/gifts";
-import { useReducedMotion } from "@/lib/hooks";
+import { useReducedMotion, hide } from "@/lib/hooks";
 import styles from "./Gallery.module.css";
 
 const Chevron = ({ dir }: { dir: "left" | "right" }) => (
@@ -14,7 +12,8 @@ const Chevron = ({ dir }: { dir: "left" | "right" }) => (
 );
 
 /** Ordered photos with arrows, thumbnails and native swipe (scroll-snap). One photo: no controls. */
-export function Gallery({ photos, name }: { photos: Photo[]; name: string }) {
+/* eslint-disable @next/next/no-img-element -- store CDN photos, shown as-is without a referrer */
+export function Gallery({ photos, name }: { photos: string[]; name: string }) {
   const track = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
   const reduced = useReducedMotion();
@@ -44,13 +43,8 @@ export function Gallery({ photos, name }: { photos: Photo[]; name: string }) {
           aria-label={many ? `Fotos de ${name}` : undefined}
         >
           {photos.map((ph, i) => (
-            <div key={ph.id + i} className={styles.slide} aria-label={many ? `Foto ${i + 1} de ${photos.length}` : undefined}>
-              <Image
-                src={`https://images.unsplash.com/photo-${ph.id}`}
-                alt={ph.alt}
-                fill
-                sizes="(max-width: 860px) 100vw, 520px"
-              />
+            <div key={ph + i} className={styles.slide} aria-label={many ? `Foto ${i + 1} de ${photos.length}` : undefined}>
+              <img src={ph} alt={i === 0 ? name : `${name}, foto ${i + 1}`} referrerPolicy="no-referrer" loading={i === 0 ? "eager" : "lazy"} onError={hide} />
             </div>
           ))}
         </div>
@@ -77,14 +71,14 @@ export function Gallery({ photos, name }: { photos: Photo[]; name: string }) {
         <div className={styles.thumbs}>
           {photos.map((ph, i) => (
             <button
-              key={ph.id + i}
+              key={ph + i}
               type="button"
               className={styles.thumb}
               aria-label={`Mostrar foto ${i + 1}`}
               aria-current={i === index ? "true" : undefined}
               onClick={() => go(i)}
             >
-              <Image src={`https://images.unsplash.com/photo-${ph.id}`} alt="" fill sizes="72px" />
+              <img src={ph} alt="" referrerPolicy="no-referrer" loading="lazy" onError={hide} />
             </button>
           ))}
         </div>

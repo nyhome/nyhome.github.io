@@ -17,22 +17,46 @@ export function activeIndex(progress: number, n: number): number {
   return Math.min(n - 1, Math.floor(p * n));
 }
 
-/** Gifts a guest can see: confirmed purchases leave the catalog. Ranges include the lower bound only. */
-export function visibleGifts(gifts: Gift[], room: RoomId | "todos", price: PriceRangeId): Gift[] {
-  const range = PRICE_RANGES.find((r) => r.id === price) ?? PRICE_RANGES[0];
-  return gifts.filter(
-    (g) =>
-      g.status !== "confirmed" &&
-      (room === "todos" || g.room === room) &&
-      g.price >= range.min &&
-      (range.max === Infinity ? true : g.price < range.max),
-  );
+// Same 72h as hold() in firestore.rules and HOLD_MS in scripts/mailer.mjs.
+export const HOLD_HOURS = 72;
+const HOLD_MS = HOLD_HOURS * 3600_000;
+
+/** When a reservation's hold ends, or null if the gift isn't held. */
+export function holdEnds(g: Gift): number | null {
+  return g.status === "reserved" && g.reservedAt !== null ? g.reservedAt + HOLD_MS : null;
 }
 
-/** "3 de 8 presentes escolhidos": the numerator counts confirmed purchases only. */
+/** Bought, or reserved and still inside the hold. An expired hold counts as available again. */
+export function isSoldOut(g: Gift, now: number): boolean {
+  const ends = holdEnds(g);
+  return g.status === "bought" || (ends !== null && ends > now);
+}
+
+/** Gifts a guest can see, sold-out ones last within each room. Ranges include the lower bound only. */
+export function visibleGifts(gifts: Gift[], room: RoomId | "todos", price: PriceRangeId, now: number): Gift[] {
+  const range = PRICE_RANGES.find((r) => r.id === price) ?? PRICE_RANGES[0];
+  return gifts
+    .filter(
+      (g) =>
+        g.status !== "draft" &&
+        (room === "todos" || g.room === room) &&
+        g.price >= range.min &&
+        (range.max === Infinity ? true : g.price < range.max),
+    )
+    .sort((a, b) => Number(isSoldOut(a, now)) - Number(isSoldOut(b, now)));
+}
+
+/** "3 de 8 presentes escolhidos": the numerator counts bought gifts, the couple's own included. */
 export function roomProgress(gifts: Gift[], room: RoomId): { chosen: number; total: number } {
-  const inRoom = gifts.filter((g) => g.room === room);
-  return { chosen: inRoom.filter((g) => g.status === "confirmed").length, total: inRoom.length };
+  const inRoom = gifts.filter((g) => g.room === room && g.status !== "draft");
+  return { chosen: inRoom.filter((g) => g.status === "bought").length, total: inRoom.length };
+}
+
+/** Badge text for a sold-out gift: who gave it, or the couple's own mark. */
+export function giverLabel(g: Gift): string | null {
+  if (g.byCouple) return "Dos noivos";
+  if (!g.giverName) return null;
+  return `Presente de ${g.giverName}${g.giverTier ? ` · ${g.giverTier}` : ""}`;
 }
 
 export function progressLabel({ chosen, total }: { chosen: number; total: number }): string {
