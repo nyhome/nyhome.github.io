@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Firebase's own sign-in helper, copied as-is (see README).
+    "public/__/auth/**",
   ]),
 ]);
 

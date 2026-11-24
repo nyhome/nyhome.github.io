@@ -45,3 +45,14 @@ O navegador abre de verdade. Se a loja pedir login ou captcha, resolva lá e ape
 4. **Secrets:** `FIREBASE_SERVICE_ACCOUNT` (o JSON da service account), `GMAIL_USER`, `GMAIL_APP_PASSWORD` (senha de app; exige verificação em 2 etapas) e `ADMIN_EMAILS` (os dois e-mails, separados por vírgula).
 
 O cron do GitHub atrasa às vezes, e é desligado depois de 60 dias sem commit no repo; qualquer push religa.
+
+### Login no iPhone (Safari)
+
+O login usa `authDomain: nyhome.github.io` (variável `NEXT_PUBLIC_FIREBASE_CONFIG` do repositório) e serve os arquivos de login do Firebase em `public/__/auth/`. Sem isso, o Safari bloqueia o armazenamento do domínio `firebaseapp.com` e o login falha com "missing initial state". Pra atualizar esses arquivos de vez em quando:
+
+```bash
+for f in handler iframe; do curl -s https://casa-ny-lista.firebaseapp.com/__/auth/$f -o public/__/auth/$f.html; done
+for f in handler.js iframe.js experiments.js; do curl -s https://casa-ny-lista.firebaseapp.com/__/auth/$f -o public/__/auth/$f; done
+```
+
+O endereço `https://nyhome.github.io/__/auth/handler` precisa estar nos URIs de redirecionamento autorizados do cliente OAuth "Web client (auto created by Google Service)", no Google Cloud Console.
