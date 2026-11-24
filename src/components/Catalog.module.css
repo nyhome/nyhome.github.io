@@ -1,0 +1,123 @@
+.section {
+  padding: clamp(72px, 10vw, 140px) var(--gutter) 120px;
+  scroll-margin-top: 0;
+}
+
+.head {
+  display: grid;
+  grid-template-columns: minmax(0, 6fr) minmax(0, 5fr);
+  gap: 16px var(--gutter);
+  align-items: end;
+  margin-bottom: 40px;
+}
+
+.title {
+  font-size: clamp(2.6rem, 5.6vw, 5rem);
+}
+
+.intro {
+  max-width: 44ch;
+  color: var(--color-text-secondary);
+}
+
+/* Filters stay at hand while the guest scrolls the list. */
+.filters {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  margin: 0 calc(var(--gutter) * -1) 24px;
+  padding: 12px var(--gutter);
+  background: color-mix(in srgb, var(--sand) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.rooms {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.price {
+  min-width: 190px;
+}
+
+.group {
+  /* Clears the sticky filter bar when jumping here from a room. */
+  scroll-margin-top: 84px;
+  padding-top: 40px;
+}
+
+.groupHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 24px;
+  padding-bottom: 20px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--color-border-emphasized);
+}
+
+.groupName {
+  font-size: clamp(2rem, 3.4vw, 2.8rem);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 48px clamp(20px, 3vw, 40px);
+}
+
+.empty {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding: 48px 0;
+}
+
+.reset {
+  font: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--olive);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+
+@media (max-width: 1100px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .head {
+    grid-template-columns: 1fr;
+  }
+  .filters {
+    gap: 8px;
+    padding-block: 10px;
+  }
+  .rooms,
+  .price {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .group {
+    scroll-margin-top: 104px;
+  }
+}
+
+@media (max-width: 560px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

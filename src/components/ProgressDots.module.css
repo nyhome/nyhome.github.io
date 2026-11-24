@@ -1,0 +1,38 @@
+.wrap {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+.dots {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1.5px solid var(--olive);
+}
+
+.dot[data-on] {
+  background: var(--terracotta);
+  border-color: var(--terracotta);
+}
+
+.label {
+  font-size: 0.9375rem;
+  color: var(--color-text-secondary);
+}
+
+.wrap[data-compact] .dot {
+  width: 8px;
+  height: 8px;
+  border-width: 1.25px;
+}
+
+.wrap[data-compact] .label {
+  font-size: 0.875rem;
+}

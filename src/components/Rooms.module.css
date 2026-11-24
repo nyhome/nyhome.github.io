@@ -1,0 +1,128 @@
+.section {
+  scroll-margin-top: 0;
+}
+
+/* Desktop: one screen of scroll per room, the stage pinned while it plays. */
+.track {
+  --p: 0;
+  height: calc(var(--n) * 100vh);
+}
+
+.stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: var(--gutter);
+  align-items: center;
+  padding: 40px var(--gutter);
+}
+
+.title {
+  font-size: clamp(1.6rem, 2.4vw, 2.1rem);
+  font-style: italic;
+  color: var(--color-text-secondary);
+  margin-bottom: 28px;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.item {
+  border-top: 1px solid var(--color-border);
+  padding: 6px 0;
+}
+
+.item:last-child {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.name {
+  font: inherit;
+  font-family: var(--font-family-heading);
+  font-size: clamp(2rem, 3.6vw, 3.4rem);
+  line-height: 1.1;
+  background: none;
+  border: 0;
+  padding: 4px 0;
+  cursor: pointer;
+  color: var(--olive);
+  opacity: 0.72;
+  transition: color 0.3s var(--ease-out), opacity 0.3s var(--ease-out);
+}
+
+.name:hover {
+  opacity: 1;
+}
+
+/* Terracotta only at this size: 3.3:1 on sand is enough for large text. */
+.item[data-active] .name {
+  color: var(--terracotta);
+  opacity: 1;
+}
+
+.detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  padding: 4px 0 12px;
+}
+
+.detail[hidden] {
+  display: none;
+}
+
+.photoCol {
+  margin: 0;
+  height: min(82vh, 760px);
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 12px;
+}
+
+.photo {
+  height: 100%;
+}
+
+.caption {
+  font-family: var(--font-family-heading);
+  font-style: italic;
+  font-size: 1.25rem;
+  color: var(--color-text-secondary);
+}
+
+/* Phone: rooms stacked, each photo opens once as it scrolls in. */
+.stack {
+  display: grid;
+  gap: 56px;
+  padding: 72px var(--gutter);
+}
+
+.stack .title {
+  margin-bottom: 0;
+}
+
+.card {
+  display: grid;
+  gap: 14px;
+}
+
+.cardPhoto {
+  aspect-ratio: 4 / 3;
+}
+
+.cardName {
+  font-size: 2.4rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .name {
+    transition: none;
+  }
+}

@@ -1,0 +1,66 @@
+/* Astryx: order maps to its layer cascade (reset → components → theme tokens). */
+@import "@astryxdesign/core/reset.css";
+@import "@astryxdesign/core/astryx.css";
+@import "@astryxdesign/theme-neutral/theme.css";
+
+/* Casa N&Y identity on top of the neutral theme. Unlayered, so it beats the theme's layered tokens. */
+[data-astryx-theme="neutral"] {
+  --sand: #f5f1e5;
+  --olive: #36402a;
+  --olive-soft: #5c6450;
+  --olive-light: #e8e7d3;
+  --terracotta: #ba724f;
+  --paper: #fbf9f3;
+
+  --color-background-body: var(--sand);
+  --color-background-surface: var(--paper);
+  --color-background-card: var(--paper);
+  --color-background-popover: var(--paper);
+  --color-background-muted: var(--olive-light);
+  --color-accent: var(--olive);
+  --color-accent-muted: var(--olive-light);
+  --color-on-accent: var(--sand);
+  --color-text-primary: var(--olive);
+  --color-text-secondary: var(--olive-soft);
+  --color-text-accent: var(--olive);
+  --color-icon-primary: var(--olive);
+  --color-border: rgb(54 64 42 / 0.16);
+  --color-border-emphasized: rgb(54 64 42 / 0.34);
+
+  --font-family-heading: var(--font-baskervville), "Baskerville", Georgia, serif;
+  --font-family-body: var(--font-dm-sans), system-ui, sans-serif;
+
+  --gutter: clamp(20px, 4vw, 64px);
+  --ease-out: cubic-bezier(0.22, 0.7, 0.2, 1);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  background: var(--color-background-body);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-body);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+:where(h1, h2, h3) {
+  font-family: var(--font-family-heading);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+}
+
+/* Not on elements focused by script (tabindex=-1), like the dialog title Astryx focuses on open. */
+:focus-visible:not([tabindex="-1"]) {
+  outline: 2px solid var(--terracotta);
+  outline-offset: 3px;
+}

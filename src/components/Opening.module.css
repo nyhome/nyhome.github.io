@@ -1,0 +1,88 @@
+.opening {
+  --p: 0;
+  height: 175vh;
+}
+
+.stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 11fr) minmax(0, 9fr);
+  overflow: hidden;
+}
+
+.photo {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+}
+
+.photo img {
+  object-fit: cover;
+  transform: scale(calc(1 + var(--p) * 0.14));
+  transform-origin: 30% 60%;
+  will-change: transform;
+}
+
+.invite {
+  align-self: center;
+  padding: 48px var(--gutter);
+  display: grid;
+  gap: 24px;
+  transform: translateY(calc(var(--p) * -14vh));
+  opacity: calc(1 - var(--p) * 1.15);
+}
+
+.kicker {
+  font-family: var(--font-family-heading);
+  font-style: italic;
+  /* 24px+ so terracotta on sand (3.3:1) counts as large text. */
+  font-size: 1.6rem;
+  color: var(--terracotta);
+}
+
+.names {
+  font-size: clamp(3.4rem, 7.4vw, 7.2rem);
+  line-height: 0.95;
+}
+
+.amp {
+  font-style: italic;
+  color: var(--terracotta);
+}
+
+.lede {
+  margin-top: 12px;
+  max-width: 34ch;
+  font-size: 1.15rem;
+  color: var(--color-text-secondary);
+}
+
+.cta {
+  margin-top: 8px;
+}
+
+/* Phone: names and button come before the photo, no scroll choreography. */
+@media (max-width: 860px) {
+  .opening {
+    height: auto;
+  }
+  .stage {
+    position: static;
+    height: auto;
+    grid-template-columns: 1fr;
+  }
+  .invite {
+    order: -1;
+    padding-top: 56px;
+    transform: none;
+    opacity: 1;
+  }
+  .photo {
+    aspect-ratio: 4 / 5;
+  }
+  .photo img {
+    transform: none;
+  }
+}

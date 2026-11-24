@@ -1,0 +1,39 @@
+.panel {
+  position: relative;
+  overflow: hidden;
+  background: var(--olive-light);
+}
+
+.base {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.slats {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+
+.slat {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  transform-origin: center;
+}
+
+.slat img {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+}
+
+/* Waiting to be revealed on a phone: slats closed. */
+.panel[data-hidden] .slat {
+  transform: scaleX(0);
+}
