@@ -26,6 +26,17 @@ export interface AdminData {
   gifts: Gift[];
   /** Active reservations per gift id: still "reserved" and still holding units on the gift. */
   active: Record<string, Reservation[]>;
+  /** Guests' confirmed purchases, newest first (the couple's own have no date and stay out). */
+  purchases: Purchase[];
+}
+
+export interface Purchase {
+  giftId: string;
+  name: string;
+  tier: string;
+  units: number;
+  /** Epoch ms of the confirmation. */
+  at: number;
 }
 
 export async function fetchAll(): Promise<AdminData> {
@@ -33,13 +44,20 @@ export async function fetchAll(): Promise<AdminData> {
   const gifts = g.docs.map((d) => toGift(d.id, d.data()));
   const byGift = new Map(gifts.map((x) => [x.id, x]));
   const active: Record<string, Reservation[]> = {};
+  const purchases: Purchase[] = [];
   for (const d of r.docs) {
     const data = d.data();
+    if (data.status === "bought")
+      purchases.push({
+        giftId: data.giftId, name: data.name, tier: data.tier, units: data.units ?? 1,
+        at: ((data.closedAt ?? data.reservedAt) as Timestamp).toMillis(),
+      });
     const res = { token: d.id, ...data, units: data.units ?? 1, reservedAt: (data.reservedAt as Timestamp).toMillis() } as Reservation;
     const gift = byGift.get(res.giftId);
     if (gift && res.status === "reserved" && res.holdId in gift.holds) (active[gift.id] ??= []).push(res);
   }
-  return { gifts, active };
+  purchases.sort((a, b) => b.at - a.at);
+  return { gifts, active, purchases };
 }
 
 export interface GiftInput {

@@ -195,6 +195,16 @@ export async function firestore() {
 
 /** Saves a product checked by validateProduct; returns the new gift id. */
 export async function saveProduct({ db, FieldValue }, { status, ...data }) {
+  // The same model again means more units of it, never a copy (a copy per unit is what quantity replaced).
+  if (data.model) {
+    const same = (await db.collection("gifts").where("model", "==", data.model).limit(1).get()).docs[0];
+    if (same) {
+      const quantity = (same.data().quantity ?? 1) + data.quantity;
+      await same.ref.update({ quantity, ...(same.data().status === "bought" ? { status: "available" } : {}) });
+      console.log(`Já existia: ${data.name} agora com ${quantity} unidades id=${same.id}`);
+      return same.id;
+    }
+  }
   const ref = await db.collection("gifts").add({
     ...data, status, boughtUnits: 0, heldUnits: 0, holds: {}, givers: [], lastHold: "", createdAt: FieldValue.serverTimestamp(),
   });

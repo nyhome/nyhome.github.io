@@ -16,6 +16,7 @@ import {
 } from "@/lib/admin";
 import { formatBRL, holdEndsAt, unitsLeft } from "@/lib/catalog";
 import { ADMIN_UIDS, fetchDelivery, type Reservation } from "@/lib/firebase";
+import { Dashboard } from "./Dashboard";
 import { GiftForm } from "./GiftForm";
 import { hide } from "@/lib/hooks";
 import styles from "./Admin.module.css";
@@ -60,7 +61,7 @@ export function Admin() {
 }
 
 function Panel({ user }: { user: User }) {
-  const [tab, setTab] = useState("presentes");
+  const [tab, setTab] = useState("visao");
   return (
     <main className={styles.page}>
       <header className={styles.head}>
@@ -70,10 +71,11 @@ function Panel({ user }: { user: User }) {
         </span>
       </header>
       <TabList value={tab} onChange={setTab}>
+        <Tab value="visao" label="Visão geral" />
         <Tab value="presentes" label="Presentes" />
         <Tab value="entrega" label="Entrega" />
       </TabList>
-      {tab === "presentes" ? <Gifts /> : <DeliveryForm />}
+      {tab === "visao" ? <Dashboard /> : tab === "presentes" ? <Gifts /> : <DeliveryForm />}
     </main>
   );
 }

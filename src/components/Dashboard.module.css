@@ -1,0 +1,286 @@
+.dash {
+  display: grid;
+  gap: 24px;
+}
+
+.card {
+  padding: 20px 22px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: #fbf9f3;
+}
+
+.card h2 {
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.sub {
+  margin-bottom: 16px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.empty,
+.muted {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.hero {
+  display: grid;
+  gap: 22px;
+}
+
+.heroLabel {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+/* The one hero figure: sans, proportional digits. */
+.heroValue {
+  font-size: clamp(40px, 6vw, 58px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.heroOf {
+  margin-top: 6px;
+  color: var(--color-text-secondary);
+  font-size: 16px;
+}
+
+.seg {
+  display: flex;
+  gap: 2px;
+  height: 44px;
+}
+
+.seg > div {
+  display: flex;
+  align-items: center;
+  min-width: 2px;
+  padding: 0 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 10px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sw {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.kpi {
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: var(--color-background-body);
+}
+
+.kpiLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.kpiValue {
+  margin-top: 2px;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.kpiDetail {
+  color: #8a8f7c;
+  font-size: 12px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.wide {
+  grid-column: span 7;
+}
+
+.narrow {
+  grid-column: span 5;
+}
+
+.full {
+  grid-column: span 12;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.axis {
+  fill: #8a8f7c;
+  font-size: 11px;
+}
+
+.tiers {
+  display: grid;
+  gap: 10px;
+}
+
+.tierRow {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr) 72px;
+  align-items: center;
+  gap: 10px;
+}
+
+.tierName {
+  font-size: 13px;
+  text-align: right;
+}
+
+.tierBar span {
+  display: block;
+  height: 14px;
+  border-radius: 3px;
+}
+
+.tierVal,
+.meterFig {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.meters {
+  display: grid;
+  gap: 14px;
+}
+
+.meter {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr) 200px;
+  align-items: center;
+  gap: 12px;
+}
+
+.meterName {
+  font-weight: 500;
+}
+
+.meterFig {
+  text-align: right;
+  font-size: 13px;
+}
+
+.meterFig b {
+  color: var(--color-text-primary, #2c3322);
+  font-weight: 600;
+}
+
+.bar {
+  display: flex;
+  gap: 2px;
+  height: 12px;
+}
+
+.bar > span {
+  min-width: 2px;
+  border-radius: 3px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.table th {
+  padding: 0 8px 8px 0;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.table td {
+  padding: 10px 8px 10px 0;
+  border-bottom: 1px solid #ece8d9;
+}
+
+.table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.tip {
+  position: fixed;
+  z-index: 10;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #2c3322;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 15%);
+  color: #f5f1e5;
+  font-size: 13px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+@media (max-width: 860px) {
+  .wide,
+  .narrow {
+    grid-column: span 12;
+  }
+}
+
+@media (max-width: 760px) {
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .meter {
+    grid-template-columns: 1fr auto;
+  }
+  .meter .bar {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+  .table th:nth-child(4),
+  .table td:nth-child(4) {
+    display: none;
+  }
+}
