@@ -35,8 +35,12 @@ export function Opening() {
             Nathália <span className={styles.amp}>&amp;</span> Yago
           </h1>
           <p className={styles.lede}>
-            Estamos montando a nossa casa, cômodo por cômodo. Escolha um presente da lista, reserve pelo seu nome e
-            compre na loja.
+            Calma, não é boleto! Essa é a lista do que nós mesmos vamos comprar pra nossa casa, guardada aqui pra nada
+            se perder e tudo ficar organizado.
+          </p>
+          <p className={styles.lede}>
+            Ninguém precisa dar nada. Mas, como muita gente se ofereceu: se bater a vontade de ajudar, com qualquer
+            valor, fique à vontade e fale com a gente. Sem pedido e sem cobrança, tá?
           </p>
           <div className={styles.cta}>
             <Button label="Ver lista de presentes" variant="primary" size="lg" href="#ambientes" />

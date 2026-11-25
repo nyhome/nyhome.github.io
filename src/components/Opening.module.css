@@ -59,6 +59,10 @@
   color: var(--color-text-secondary);
 }
 
+.lede + .lede {
+  margin-top: -12px;
+}
+
 .cta {
   margin-top: 8px;
 }
