@@ -79,7 +79,8 @@ service cloud.firestore {
           );
       }
 
-      allow read: if isAdmin() || resource.data.status in ['available', 'bought'];
+      // 'reserved' is the old single-reservation status (no gift has it now); kept so a cached old page still loads.
+      allow read: if isAdmin() || resource.data.status in ['available', 'reserved', 'bought'];
       allow create, delete: if isAdmin();
       allow update: if isAdmin() || guestReserve() || guestClose();
     }
