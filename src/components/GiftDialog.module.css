@@ -1,4 +1,8 @@
+/* The Dialog clips its content (overflow hidden), so the body below the header is the scroll area. */
 .body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   padding-top: 20px;
 }
 

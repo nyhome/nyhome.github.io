@@ -128,6 +128,16 @@
   padding-top: 12px;
 }
 
+/* The Dialog clips its content (overflow hidden), so the form below the header is the scroll area.
+   The 3px inline padding keeps focus rings from being cut at the edges. */
+.dialogScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 3px 4px;
+  margin: 0 -3px;
+}
+
 .cols {
   display: grid;
   grid-template-columns: 1fr 1fr;

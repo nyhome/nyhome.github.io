@@ -73,7 +73,7 @@ function Form({ gift, onClose, onSaved }: { gift: Gift | null; onClose: () => vo
   return (
     <>
       <DialogHeader title={gift ? "Editar presente" : "Novo presente"} subtitle={gift ? undefined : "Entra como rascunho; publique quando estiver pronto."} onOpenChange={(o) => !o && onClose()} />
-      <form className={styles.form} onSubmit={submit} noValidate>
+      <form className={`${styles.form} ${styles.dialogScroll}`} onSubmit={submit} noValidate>
         <TextInput label="Nome no catálogo" description="Curto, como aparece no card." value={name} onChange={setName} isRequired />
         <TextInput label="Modelo completo" description="O texto exato que o convidado vai buscar na loja." value={model} onChange={setModel} />
         <div className={styles.cols}>
