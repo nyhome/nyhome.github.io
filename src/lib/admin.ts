@@ -5,7 +5,7 @@ import {
 import {
   Timestamp, addDoc, collection, doc, getDocs, serverTimestamp, setDoc, updateDoc, writeBatch,
 } from "firebase/firestore/lite";
-import type { Delivery, Gift, GiftLink, RoomId } from "@/data/gifts";
+import type { Delivery, Gift, GiftLink, RoomId, Voltage } from "@/data/gifts";
 import { EMULATOR, app, db, toGift, type Reservation } from "./firebase";
 
 let authInstance: Auth | null = null;
@@ -48,6 +48,8 @@ export interface GiftInput {
   brand: string;
   description: string;
   dims: string;
+  /** "" when it isn't electrical. */
+  voltage: Voltage | "";
   price: number;
   links: GiftLink[];
   photos: string[];

@@ -11,7 +11,7 @@ import { reserveGift } from "@/lib/firebase";
 import { useIsNarrow } from "@/lib/hooks";
 import { CopyButton } from "./CopyButton";
 import { Gallery } from "./Gallery";
-import { DeliveryNote, ModelBox, StoreLinks } from "./GiftInfo";
+import { DeliveryNote, ModelBox, StoreLinks, VoltageNote } from "./GiftInfo";
 import styles from "./GiftDialog.module.css";
 
 type Step = { kind: "details" } | { kind: "reserve" } | { kind: "done"; guest: string; until: Date; link: string };
@@ -122,6 +122,7 @@ function Content({ gift, now, delivery, onClose, onChanged }: Omit<Props, "gift"
               <p className={styles.note}>Preço de referência. Confira o valor e o estoque na loja.</p>
               {gift.description && <p className={styles.description}>{gift.description}</p>}
               <ModelBox gift={gift} />
+              <VoltageNote gift={gift} />
               {(gift.brand || gift.dims || gift.variants) && (
                 <dl className={styles.spec}>
                   {gift.brand && (<><dt>Marca</dt><dd>{gift.brand}</dd></>)}
@@ -220,6 +221,7 @@ function Content({ gift, now, delivery, onClose, onChanged }: Omit<Props, "gift"
             </div>
             <p className={styles.note}>Enviamos este link para o seu e-mail em alguns minutos. Guarde-o: é só com ele que você confirma a compra.</p>
             <ModelBox gift={gift} />
+            <VoltageNote gift={gift} />
             <StoreLinks gift={gift} />
             <DeliveryNote delivery={delivery} />
             <div className={styles.actions}>

@@ -90,3 +90,10 @@
   font-style: normal;
   white-space: pre-line;
 }
+
+.voltage {
+  padding: 12px 14px;
+  border-left: 3px solid var(--terracotta);
+  border-radius: 4px;
+  background: var(--olive-light);
+}

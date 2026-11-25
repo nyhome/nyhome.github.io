@@ -31,6 +31,8 @@ export interface Gift {
   brand: string;
   description: string;
   dims?: string;
+  /** Electrical items only; buying the wrong one can burn the appliance. */
+  voltage?: Voltage;
   variants?: string[];
   /** Reference price, used by the price filters. */
   price: number;
@@ -43,6 +45,10 @@ export interface Gift {
   giverTier: string | null;
   byCouple: boolean;
 }
+
+// Same list as VOLTAGES in scripts/api.mjs.
+export const VOLTAGES = ["127V", "220V", "Bivolt"] as const;
+export type Voltage = (typeof VOLTAGES)[number];
 
 export interface Delivery {
   recipient: string;

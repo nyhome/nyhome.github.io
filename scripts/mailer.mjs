@@ -48,7 +48,8 @@ function giftDetails(gift, delivery) {
         `<li><a href="${esc(l.url)}" style="color:#36402a">${esc(l.store)}</a>${l.coupon ? ` · cupom <strong>${esc(l.coupon)}</strong>` : ""}</li>`,
     )
     .join("");
-  return `${gift.model ? `<p><strong>Modelo completo:</strong> ${esc(gift.model)}<br><span style="font-size:13px;color:#5c6450">Ao buscar pelo modelo, confira se é exatamente este. Às vezes a loja sugere produtos parecidos.</span></p>` : ""}
+  return `${gift.voltage ? `<p><strong>Voltagem: ${esc(gift.voltage)}</strong>${gift.voltage === "Bivolt" ? "" : " (confira na loja antes de comprar)"}</p>` : ""}
+${gift.model ? `<p><strong>Modelo completo:</strong> ${esc(gift.model)}<br><span style="font-size:13px;color:#5c6450">Ao buscar pelo modelo, confira se é exatamente este. Às vezes a loja sugere produtos parecidos.</span></p>` : ""}
 ${links ? `<p style="margin-bottom:4px"><strong>Onde comprar</strong></p><ul style="margin-top:0">${links}</ul>` : ""}
 ${delivery?.address ? `<div style="border:1px solid #d9d6c3;border-radius:4px;padding:14px;margin-top:16px">
 <p style="margin-top:0"><strong>Como enviar o presente</strong></p>

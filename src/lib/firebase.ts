@@ -41,6 +41,7 @@ export function toGift(id: string, d: DocumentData): Gift {
     brand: d.brand ?? "",
     description: d.description ?? "",
     dims: d.dims || undefined,
+    voltage: d.voltage || undefined,
     variants: d.variants?.length ? d.variants : undefined,
     price: d.price ?? 0,
     links: d.links ?? [],

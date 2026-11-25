@@ -14,6 +14,8 @@ import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 
 const ROOMS = ["sala", "cozinha", "banheiro", "quarto", "escritorio", "externa"];
+// Same list as VOLTAGES in src/data/gifts.ts.
+const VOLTAGES = ["127V", "220V", "Bivolt"];
 const PORT = Number(process.env.PORT ?? 4321);
 
 export const SCHEMA = {
@@ -27,6 +29,7 @@ export const SCHEMA = {
     brand: { type: "string", maxLength: 60 },
     description: { type: "string", maxLength: 300, description: "Uma frase curta dizendo para que serve" },
     dims: { type: "string", maxLength: 60, description: "Medidas físicas, ex.: '160 x 40 cm'" },
+    voltage: { type: "string", enum: VOLTAGES, description: "Só para eletrônicos/eletrodomésticos: a voltagem do anúncio. Omita se não se aplica" },
     room: { type: "string", enum: ROOMS },
     price: { type: "number", minimum: 0, description: "Preço de referência em reais (o menor entre as lojas)" },
     links: {
@@ -87,12 +90,16 @@ export function validateProduct(p) {
     if (!l || !str(l.store, 40)) errors.push(`links[${i}].store é obrigatório`);
   });
   const photos = normalizePhotos(Array.isArray(p.photos) ? p.photos.filter(isUrl) : []).slice(0, 10);
+  // Accept "127", "220 v", "bivolt"...: an AI rarely writes it exactly like the enum.
+  const voltage = p.voltage ? VOLTAGES.find((v) => v.toLowerCase() === String(p.voltage).toLowerCase().replace(/\s/g, "").replace(/^(127|220)$/, "$1v")) : "";
+  if (voltage === undefined) errors.push(`voltage precisa ser um de: ${VOLTAGES.join(", ")}`);
   if (p.status !== undefined && !["available", "draft"].includes(p.status)) errors.push("status precisa ser 'available' ou 'draft'");
   if (errors.length) return { errors };
   return {
     value: {
       name, room: p.room, price: Math.round(price * 100) / 100,
       model: str(p.model, 200), brand: str(p.brand, 60), description: str(p.description, 300), dims: str(p.dims, 60),
+      ...(voltage ? { voltage } : {}),
       links: links.map((l) => (str(l.coupon, 40) ? { store: str(l.store, 40), url: l.url, coupon: str(l.coupon, 40).toUpperCase() } : { store: str(l.store, 40), url: l.url })),
       photos,
       status: p.status ?? "available",

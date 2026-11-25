@@ -8,7 +8,7 @@ import type { Delivery, Gift } from "@/data/gifts";
 import { HOLD_HOURS } from "@/lib/catalog";
 import { closeReservation, fetchDelivery, fetchReservation, holdsGift, type Reservation as Res } from "@/lib/firebase";
 import { fmt } from "./GiftDialog";
-import { DeliveryNote, ModelBox, StoreLinks } from "./GiftInfo";
+import { DeliveryNote, ModelBox, StoreLinks, VoltageNote } from "./GiftInfo";
 import styles from "./Reservation.module.css";
 
 type State =
@@ -119,6 +119,7 @@ function Ready({
         <Button label="Desistir" variant="ghost" size="lg" isDisabled={busy !== null} onClick={onRelease} />
       </div>
       {gift && <ModelBox gift={gift} />}
+      {gift && <VoltageNote gift={gift} />}
       {gift && <StoreLinks gift={gift} />}
       <DeliveryNote delivery={delivery} />
     </div>

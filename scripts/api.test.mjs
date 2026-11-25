@@ -72,3 +72,11 @@ test("normalizePhotos keeps one sharp copy of each photo", () => {
     ],
   );
 });
+
+test("voltage is optional and normalized from how an AI tends to write it", () => {
+  assert.equal(validateProduct(ok).value.voltage, undefined);
+  assert.equal(validateProduct({ ...ok, voltage: "127" }).value.voltage, "127V");
+  assert.equal(validateProduct({ ...ok, voltage: "220 v" }).value.voltage, "220V");
+  assert.equal(validateProduct({ ...ok, voltage: "bivolt" }).value.voltage, "Bivolt");
+  assert.ok(validateProduct({ ...ok, voltage: "110V" }).errors);
+});

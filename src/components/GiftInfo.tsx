@@ -22,6 +22,19 @@ export function ModelBox({ gift }: { gift: Gift }) {
   );
 }
 
+/** Voltage up front, so nobody buys the 220V one for a 127V house (or the other way round). */
+export function VoltageNote({ gift }: { gift: Gift }) {
+  if (!gift.voltage) return null;
+  return (
+    <p className={styles.voltage}>
+      <strong>Voltagem: {gift.voltage}</strong>
+      {gift.voltage === "Bivolt"
+        ? " (funciona em 127V e 220V)."
+        : ". Na loja, confira se escolheu essa voltagem: na errada o aparelho pode queimar."}
+    </p>
+  );
+}
+
 /** One row per store: its link and, when there is one, a copyable coupon. */
 export function StoreLinks({ gift }: { gift: Gift }) {
   if (gift.links.length === 0) return null;

@@ -6,7 +6,7 @@ import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog";
 import { Selector } from "@astryxdesign/core/Selector";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { TextInput } from "@astryxdesign/core/TextInput";
-import { ROOMS, type Gift, type GiftLink, type RoomId } from "@/data/gifts";
+import { ROOMS, VOLTAGES, type Gift, type GiftLink, type RoomId, type Voltage } from "@/data/gifts";
 import { saveGift } from "@/lib/admin";
 import { hide } from "@/lib/hooks";
 import styles from "./Admin.module.css";
@@ -35,6 +35,7 @@ function Form({ gift, onClose, onSaved }: { gift: Gift | null; onClose: () => vo
   const [room, setRoom] = useState<RoomId | undefined>(gift?.room);
   const [price, setPrice] = useState(gift ? String(gift.price) : "");
   const [dims, setDims] = useState(gift?.dims ?? "");
+  const [voltage, setVoltage] = useState<Voltage | "">(gift?.voltage ?? "");
   const [description, setDescription] = useState(gift?.description ?? "");
   const [photos, setPhotos] = useState<string[]>(gift?.photos.length ? gift.photos : [""]);
   const [links, setLinks] = useState<GiftLink[]>(gift?.links.length ? gift.links : [emptyLink()]);
@@ -57,7 +58,7 @@ function Form({ gift, onClose, onSaved }: { gift: Gift | null; onClose: () => vo
     setBusy(true);
     try {
       await saveGift(gift?.id ?? null, {
-        room, name: name.trim(), model: model.trim(), brand: brand.trim(), description: description.trim(), dims: dims.trim(),
+        room, name: name.trim(), model: model.trim(), brand: brand.trim(), description: description.trim(), dims: dims.trim(), voltage,
         price: value, links: cleanLinks, photos: photos.map((p) => p.trim()).filter(Boolean),
       });
       onSaved();
@@ -83,6 +84,13 @@ function Form({ gift, onClose, onSaved }: { gift: Gift | null; onClose: () => vo
           <TextInput label="Marca" value={brand} onChange={setBrand} isOptional />
           <TextInput label="Medidas" value={dims} onChange={setDims} isOptional />
         </div>
+        <Selector
+          label="Voltagem"
+          description="Só para eletrônicos e eletrodomésticos."
+          options={[{ value: "", label: "Não se aplica" }, ...VOLTAGES.map((v) => ({ value: v, label: v }))]}
+          value={voltage}
+          onChange={(v) => setVoltage(v as Voltage | "")}
+        />
         <TextArea label="Descrição" value={description} onChange={setDescription} rows={3} isOptional />
 
         <fieldset className={styles.fieldset}>
