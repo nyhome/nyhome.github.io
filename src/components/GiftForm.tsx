@@ -34,6 +34,7 @@ function Form({ gift, onClose, onSaved }: { gift: Gift | null; onClose: () => vo
   const [brand, setBrand] = useState(gift?.brand ?? "");
   const [room, setRoom] = useState<RoomId | undefined>(gift?.room);
   const [price, setPrice] = useState(gift ? String(gift.price) : "");
+  const [quantity, setQuantity] = useState(String(gift?.quantity ?? 1));
   const [dims, setDims] = useState(gift?.dims ?? "");
   const [voltage, setVoltage] = useState<Voltage | "">(gift?.voltage ?? "");
   const [description, setDescription] = useState(gift?.description ?? "");
@@ -55,10 +56,21 @@ function Form({ gift, onClose, onSaved }: { gift: Gift | null; onClose: () => vo
       setError("Os links precisam começar com http:// ou https://.");
       return;
     }
+    const qty = Number(quantity);
+    // Units already held or bought can't disappear from under the guests who took them.
+    const taken = gift ? gift.boughtUnits + gift.heldUnits : 0;
+    if (!Number.isInteger(qty) || qty < 1 || qty > 50) {
+      setError("Quantidade precisa ser um número inteiro de 1 a 50.");
+      return;
+    }
+    if (qty < taken) {
+      setError(`Já tem ${taken} ${taken === 1 ? "unidade reservada ou comprada" : "unidades reservadas ou compradas"}; a quantidade não pode ser menor.`);
+      return;
+    }
     setBusy(true);
     try {
       await saveGift(gift?.id ?? null, {
-        room, name: name.trim(), model: model.trim(), brand: brand.trim(), description: description.trim(), dims: dims.trim(), voltage,
+        room, name: name.trim(), model: model.trim(), brand: brand.trim(), description: description.trim(), dims: dims.trim(), voltage, quantity: qty,
         price: value, links: cleanLinks, photos: photos.map((p) => p.trim()).filter(Boolean),
       });
       onSaved();
@@ -78,8 +90,16 @@ function Form({ gift, onClose, onSaved }: { gift: Gift | null; onClose: () => vo
         <TextInput label="Modelo completo" description="O texto exato que o convidado vai buscar na loja." value={model} onChange={setModel} />
         <div className={styles.cols}>
           <Selector label="Cômodo" placeholder="Escolha" options={ROOMS.map((r) => ({ value: r.id, label: r.name }))} value={room} onChange={(v) => setRoom(v as RoomId)} isRequired />
-          <TextInput label="Preço de referência (R$)" value={price} onChange={setPrice} isRequired />
+          <TextInput label="Preço de referência (R$)" description="Por unidade." value={price} onChange={setPrice} isRequired />
         </div>
+        <TextInput
+          label="Quantidade"
+          description="Quantas unidades vocês querem. Cada convidado escolhe quantas vai dar."
+          type="text"
+          value={quantity}
+          onChange={setQuantity}
+          isRequired
+        />
         <div className={styles.cols}>
           <TextInput label="Marca" value={brand} onChange={setBrand} isOptional />
           <TextInput label="Medidas" value={dims} onChange={setDims} isOptional />

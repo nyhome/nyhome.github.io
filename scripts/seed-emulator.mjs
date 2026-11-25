@@ -14,8 +14,8 @@ const H = 3600_000;
 const u = (id) => `https://images.unsplash.com/photo-${id}?w=900&q=75&auto=format&fit=crop`;
 
 const base = {
-  brand: "", description: "", dims: "", status: "available", reservedAt: null, giverName: null, giverTier: null,
-  byCouple: false, createdAt: Timestamp.now(),
+  brand: "", description: "", dims: "", status: "available",
+  createdAt: Timestamp.now(), quantity: 1, boughtUnits: 0, heldUnits: 0, holds: {}, givers: [], lastHold: "",
 };
 const gifts = {
   luminaria: { room: "sala", name: "Luminária de piso", model: "Tok&Stok Arco LP-200 Preta Bivolt", price: 489, dims: "160 cm",
@@ -32,7 +32,9 @@ const gifts = {
     photos: [u("1578500494198-246f612d3b3d")], links: [{ store: "Shopee", url: "https://shopee.com.br/search?keyword=vaso" }] },
   rascunho: { room: "quarto", name: "Rascunho importado", model: "Jogo de cama Queen", price: 300, status: "draft",
     photos: [u("1615874959474-d609969a20ed")], links: [] },
-  edredom: { room: "quarto", name: "Edredom", model: "Altenburg Queen", price: 350, status: "bought", byCouple: true,
+  lencol: { room: "quarto", name: "Jogo de lençol", model: "Hoomy Algodão Egípcio Casal", price: 754, quantity: 3,
+    photos: [u("1615874959474-d609969a20ed")], links: [{ store: "Amazon", url: "https://www.amazon.com.br/s?k=lencol" }] },
+  edredom: { room: "quarto", name: "Edredom", model: "Altenburg Queen", price: 350, status: "bought",
     photos: [u("1615874959474-d609969a20ed")], links: [] },
 };
 
@@ -41,24 +43,40 @@ for (const [id, g] of Object.entries(gifts)) batch.set(db.doc(`gifts/${id}`), { 
 batch.set(db.doc("settings/delivery"), { recipient: "Nathália Exemplo", address: "Rua das Flores, 123, ap 45\nJardim, São Paulo - SP\n01234-567" });
 
 // Reservations: 1h (welcome due), 50h (reminder due), 73h (expires), and a confirmed purchase (admin notice due).
+// Reservations: 1h (welcome due), 50h (reminder due), 73h (expires), a confirmed purchase (admin notice due),
+// and 2 of the 3 sheet sets held by one guest.
 const reservations = [
   { gift: "panela", ageH: 1, name: "Maria Silva", tier: "Prima", status: "reserved" },
   { gift: "cafeteira", ageH: 50, name: "João Souza", tier: "Tio", status: "reserved", mailed: { welcome: true } },
   { gift: "toalhas", ageH: 73, name: "Ana Lima", tier: "Amiga", status: "reserved", mailed: { welcome: true, reminder: true } },
   { gift: "vaso", ageH: 5, name: "Pedro Alves", tier: "Irmão", status: "bought", mailed: { welcome: true } },
+  { gift: "lencol", ageH: 2, name: "Beatriz Costa", tier: "Madrinha", status: "reserved", units: 2 },
 ];
 const tokens = {};
+const held = {};
 for (const r of reservations) {
   const token = randomUUID();
+  const holdId = token.replaceAll("-", "").slice(0, 20);
+  const units = r.units ?? 1;
   tokens[r.gift] = token;
   const at = Timestamp.fromMillis(Date.now() - r.ageH * H);
+  const first = r.name.split(" ")[0];
   batch.set(db.doc(`reservations/${token}`), {
-    giftId: r.gift, name: r.name, email: `${r.name.split(" ")[0].toLowerCase()}@example.com`, tier: r.tier, status: r.status,
+    giftId: r.gift, holdId, units, name: r.name, email: `${first.toLowerCase()}@example.com`, tier: r.tier, status: r.status,
     reservedAt: at, adminNotified: false, ...(r.mailed ? { mailed: r.mailed } : {}),
   });
-  batch.set(db.doc(`giftLocks/${r.gift}`), { token });
-  batch.update(db.doc(`gifts/${r.gift}`), { status: r.status, reservedAt: at, giverName: r.name.split(" ")[0], giverTier: r.tier });
+  if (r.status === "reserved") {
+    batch.set(db.doc(`holdLocks/${holdId}`), { token, giftId: r.gift });
+    held[r.gift] ??= { holds: {}, heldUnits: 0 };
+    held[r.gift].holds[holdId] = { units, reservedAt: at, giverName: first, giverTier: r.tier };
+    held[r.gift].heldUnits += units;
+  } else {
+    batch.update(db.doc(`gifts/${r.gift}`), { status: "bought", boughtUnits: units, givers: [{ name: first, tier: r.tier, units }] });
+  }
 }
+for (const [gift, h] of Object.entries(held)) batch.update(db.doc(`gifts/${gift}`), h);
+// The couple's own purchase.
+batch.update(db.doc("gifts/edredom"), { boughtUnits: 1, givers: [{ name: "", tier: "", units: 1, byCouple: true }] });
 await batch.commit();
 console.log("Seeded. Personal links:");
 for (const [gift, token] of Object.entries(tokens)) console.log(`  ${gift}: http://localhost:3000/reserva?t=${token}`);

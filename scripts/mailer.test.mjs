@@ -33,3 +33,13 @@ test("e-mails escape guest-typed text and carry the personal link", () => {
   assert.ok(mail.html.includes("OFF10") && mail.html.includes("Nathália"));
   assert.equal(esc(`"&'`), "&quot;&amp;&#39;");
 });
+
+test("e-mails name the units when a guest gives more than one", () => {
+  const mail = compose("welcome", {
+    res: { token: "t", name: "Ana", reservedAt: NOW, email: "a@x.com", tier: "Tia", units: 2 },
+    gift: { name: "Jogo de lençol", links: [] },
+    delivery: null,
+    site: "https://nyhome.github.io",
+  });
+  assert.ok(mail.html.includes("2 unidades de Jogo de lençol"));
+});

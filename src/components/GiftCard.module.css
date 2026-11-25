@@ -124,6 +124,12 @@
   line-height: 1.15;
 }
 
+.units {
+  color: var(--olive);
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
 .meta {
   display: flex;
   justify-content: space-between;

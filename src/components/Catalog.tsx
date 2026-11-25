@@ -12,7 +12,6 @@ import styles from "./Catalog.module.css";
 interface Props {
   rooms: Room[];
   gifts: Gift[];
-  now: number;
   status: "loading" | "error" | "ready";
   onRetry: () => void;
   room: RoomId | "todos";
@@ -23,9 +22,9 @@ interface Props {
 }
 
 /** Level 2: the gifts, grouped by room, each card drawing itself in as it scrolls into view. */
-export function Catalog({ rooms, gifts, now, status, onRetry, room, price, onRoomChange, onPriceChange, onOpen }: Props) {
+export function Catalog({ rooms, gifts, status, onRetry, room, price, onRoomChange, onPriceChange, onOpen }: Props) {
   const narrow = useIsNarrow();
-  const shown = visibleGifts(gifts, room, price, now);
+  const shown = visibleGifts(gifts, room, price);
   const groups = rooms
     .filter((r) => room === "todos" || r.id === room)
     .map((r) => ({ room: r, gifts: shown.filter((g) => g.room === r.id) }))
@@ -106,7 +105,7 @@ export function Catalog({ rooms, gifts, now, status, onRetry, room, price, onRoo
             </div>
             <div className={styles.grid}>
               {list.map((g, i) => (
-                <GiftCard key={g.id} gift={g} now={now} order={i} onOpen={onOpen} />
+                <GiftCard key={g.id} gift={g} order={i} onOpen={onOpen} />
               ))}
             </div>
           </div>

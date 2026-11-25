@@ -33,6 +33,7 @@ export const SCHEMA = {
     dims: { type: "string", maxLength: 60, description: "Medidas físicas, ex.: '160 x 40 cm'" },
     voltage: { type: "string", enum: VOLTAGES, description: "Só para eletrônicos/eletrodomésticos: a voltagem do anúncio. Omita se não se aplica" },
     room: { type: "string", enum: ROOMS },
+    quantity: { type: "integer", minimum: 1, maximum: 50, default: 1, description: "Quantas unidades vocês querem (ex.: 3 jogos de lençol num produto só, nunca 3 produtos). Cada convidado escolhe quantas dá" },
     price: { type: "number", minimum: 0, description: "Preço de referência em reais (o menor entre as lojas)" },
     links: {
       type: "array", minItems: 1, maxItems: 6,
@@ -95,11 +96,13 @@ export function validateProduct(p) {
   // Accept "127", "220 v", "bivolt"...: an AI rarely writes it exactly like the enum.
   const voltage = p.voltage ? VOLTAGES.find((v) => v.toLowerCase() === String(p.voltage).toLowerCase().replace(/\s/g, "").replace(/^(127|220)$/, "$1v")) : "";
   if (voltage === undefined) errors.push(`voltage precisa ser um de: ${VOLTAGES.join(", ")}`);
+  const quantity = p.quantity === undefined ? 1 : Number(p.quantity);
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 50) errors.push("quantity precisa ser um inteiro de 1 a 50");
   if (p.status !== undefined && !["available", "draft"].includes(p.status)) errors.push("status precisa ser 'available' ou 'draft'");
   if (errors.length) return { errors };
   return {
     value: {
-      name, room: p.room, price: Math.round(price * 100) / 100,
+      name, room: p.room, price: Math.round(price * 100) / 100, quantity,
       model: str(p.model, 200), brand: str(p.brand, 60), description: str(p.description, 300), dims: str(p.dims, 60),
       ...(voltage ? { voltage } : {}),
       links: links.map((l) => (str(l.coupon, 40) ? { store: str(l.store, 40), url: l.url, coupon: str(l.coupon, 40).toUpperCase() } : { store: str(l.store, 40), url: l.url })),
@@ -109,7 +112,7 @@ export function validateProduct(p) {
   };
 }
 
-const UPDATABLE = ["price", "links", "status"];
+const UPDATABLE = ["price", "links", "status", "quantity"];
 
 /**
  * Checks a price/links refresh against the gift as it is now; returns { update } (only the changed keys, normalized)
@@ -119,6 +122,9 @@ export function mergeUpdate(current, patch) {
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) return { errors: ["a atualização precisa ser um objeto JSON"] };
   const extra = Object.keys(patch).filter((k) => !UPDATABLE.includes(k));
   if (extra.length) return { errors: [`só dá para atualizar ${UPDATABLE.join(", ")}; recusado: ${extra.join(", ")}`] };
+  const taken = (current.boughtUnits ?? 0) + (current.heldUnits ?? 0);
+  if (patch.quantity !== undefined && Number(patch.quantity) < taken)
+    return { errors: [`já tem ${taken} unidades reservadas ou compradas; quantity não pode ser menor`] };
   if (patch.status !== undefined && !["available", "draft"].includes(current.status))
     return { errors: [`o presente está "${current.status}"; o status dele não muda por aqui`] };
   const { value, errors } = validateProduct({
@@ -140,6 +146,7 @@ export async function listGifts({ db }) {
       const g = d.data();
       return {
         id: d.id, status: g.status, name: g.name, model: g.model, voltage: g.voltage ?? null, room: g.room, price: g.price,
+        quantity: g.quantity ?? 1, boughtUnits: g.boughtUnits ?? 0, heldUnits: g.heldUnits ?? 0,
         links: g.links ?? [], priceCheckedAt: g.priceCheckedAt?.toDate().toISOString() ?? null,
       };
     })
@@ -187,7 +194,7 @@ export async function firestore() {
 /** Saves a product checked by validateProduct; returns the new gift id. */
 export async function saveProduct({ db, FieldValue }, { status, ...data }) {
   const ref = await db.collection("gifts").add({
-    ...data, status, reservedAt: null, giverName: null, giverTier: null, byCouple: false, createdAt: FieldValue.serverTimestamp(),
+    ...data, status, boughtUnits: 0, heldUnits: 0, holds: {}, givers: [], lastHold: "", createdAt: FieldValue.serverTimestamp(),
   });
   console.log(`${status === "draft" ? "Rascunho" : "Publicado"}: ${data.name} (R$ ${data.price}) id=${ref.id}`);
   return ref.id;

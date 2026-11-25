@@ -25,6 +25,17 @@
   line-height: 1;
 }
 
+.each {
+  font-family: var(--font-family-body, inherit);
+  font-size: 1rem;
+  color: var(--color-text-secondary);
+}
+
+.units {
+  color: var(--olive);
+  font-weight: 500;
+}
+
 .note {
   font-size: 0.875rem;
   color: var(--color-text-secondary);

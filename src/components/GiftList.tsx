@@ -13,7 +13,6 @@ import { Rooms } from "./Rooms";
 export function GiftList({ rooms }: { rooms: Room[] }) {
   const [gifts, setGifts] = useState<Gift[] | null>(null);
   const [delivery, setDelivery] = useState<Delivery | null>(null);
-  const [now, setNow] = useState(0);
   const [failed, setFailed] = useState(false);
   const [room, setRoom] = useState<RoomId | "todos">("todos");
   const [price, setPrice] = useState<PriceRangeId>("todos");
@@ -26,7 +25,6 @@ export function GiftList({ rooms }: { rooms: Room[] }) {
         .then(([g, d]) => {
           setGifts(g);
           setDelivery(d);
-          setNow(Date.now());
           setFailed(false);
         })
         .catch(() => setFailed(true)),
@@ -64,7 +62,6 @@ export function GiftList({ rooms }: { rooms: Room[] }) {
       <Catalog
         rooms={rooms}
         gifts={list}
-        now={now}
         status={failed ? "error" : gifts === null ? "loading" : "ready"}
         onRetry={load}
         room={room}
@@ -76,7 +73,7 @@ export function GiftList({ rooms }: { rooms: Room[] }) {
           setOpenId(g.id);
         }}
       />
-      <GiftDialog gift={open} now={now} delivery={delivery} onClose={close} onChanged={load} />
+      <GiftDialog gift={open} delivery={delivery} onClose={close} onChanged={load} />
     </>
   );
 }

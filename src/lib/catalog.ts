@@ -21,19 +21,15 @@ export function activeIndex(progress: number, n: number): number {
 export const HOLD_HOURS = 72;
 const HOLD_MS = HOLD_HOURS * 3600_000;
 
-/** When a reservation's hold ends, or null if the gift isn't held. */
-export function holdEnds(g: Gift): number | null {
-  return g.status === "reserved" && g.reservedAt !== null ? g.reservedAt + HOLD_MS : null;
-}
+export const holdEndsAt = (reservedAt: number) => reservedAt + HOLD_MS;
 
-/** Bought, or reserved and still inside the hold. An expired hold counts as available again. */
-export function isSoldOut(g: Gift, now: number): boolean {
-  const ends = holdEnds(g);
-  return g.status === "bought" || (ends !== null && ends > now);
-}
+/** Units still open to a new reservation. Holds past 72h keep counting until the mailer clears them (≤15 min). */
+export const unitsLeft = (g: Gift) => Math.max(0, g.quantity - g.boughtUnits - g.heldUnits);
+
+export const isSoldOut = (g: Gift) => g.status === "bought" || unitsLeft(g) === 0;
 
 /** Gifts a guest can see, sold-out ones last within each room. Ranges include the lower bound only. */
-export function visibleGifts(gifts: Gift[], room: RoomId | "todos", price: PriceRangeId, now: number): Gift[] {
+export function visibleGifts(gifts: Gift[], room: RoomId | "todos", price: PriceRangeId): Gift[] {
   const range = PRICE_RANGES.find((r) => r.id === price) ?? PRICE_RANGES[0];
   return gifts
     .filter(
@@ -43,20 +39,38 @@ export function visibleGifts(gifts: Gift[], room: RoomId | "todos", price: Price
         g.price >= range.min &&
         (range.max === Infinity ? true : g.price < range.max),
     )
-    .sort((a, b) => Number(isSoldOut(a, now)) - Number(isSoldOut(b, now)));
+    .sort((a, b) => Number(isSoldOut(a)) - Number(isSoldOut(b)));
 }
 
-/** "3 de 8 presentes escolhidos": the numerator counts bought gifts, the couple's own included. */
+/** "3 de 8 presentes escolhidos", counted in units: 3 sheet sets are 3 gifts. The couple's own count too. */
 export function roomProgress(gifts: Gift[], room: RoomId): { chosen: number; total: number } {
   const inRoom = gifts.filter((g) => g.room === room && g.status !== "draft");
-  return { chosen: inRoom.filter((g) => g.status === "bought").length, total: inRoom.length };
+  return { chosen: inRoom.reduce((n, g) => n + g.boughtUnits, 0), total: inRoom.reduce((n, g) => n + g.quantity, 0) };
 }
 
-/** Badge text for a sold-out gift: who gave it, or the couple's own mark. */
+/** Who is giving it, bought or on hold: "Presente de Maria · Prima", "Presente de Maria e João", "Dos noivos". */
 export function giverLabel(g: Gift): string | null {
-  if (g.byCouple) return "Dos noivos";
-  if (!g.giverName) return null;
-  return `Presente de ${g.giverName}${g.giverTier ? ` · ${g.giverTier}` : ""}`;
+  const people = [
+    ...g.givers.filter((x) => !x.byCouple).map((x) => ({ name: x.name, tier: x.tier })),
+    ...Object.values(g.holds).map((h) => ({ name: h.giverName, tier: h.giverTier })),
+  ];
+  const couple = g.givers.some((x) => x.byCouple);
+  if (!people.length) return couple ? "Dos noivos" : null;
+  const names = [...new Set(people.map((p) => p.name))];
+  const who =
+    names.length === 1
+      ? `${names[0]}${people.length === 1 && people[0].tier ? ` · ${people[0].tier}` : ""}`
+      : names.length === 2
+        ? `${names[0]} e ${names[1]}`
+        : `${names[0]}, ${names[1]} e mais ${names.length - 2}`;
+  return `Presente de ${who}${couple ? " e dos noivos" : ""}`;
+}
+
+/** "3 unidades · faltam 2"; null for single gifts. */
+export function unitsLabel(g: Gift): string | null {
+  if (g.quantity <= 1) return null;
+  const left = unitsLeft(g);
+  return `${g.quantity} unidades${left && left < g.quantity ? ` · faltam ${left}` : ""}`;
 }
 
 export function progressLabel({ chosen, total }: { chosen: number; total: number }): string {

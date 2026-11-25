@@ -41,7 +41,7 @@ export function Reservation() {
     setBusy(outcome);
     setFailed(false);
     try {
-      await closeReservation(state.reservation.token, state.reservation.giftId, outcome);
+      await closeReservation(state.reservation, outcome);
       await load();
     } catch {
       setFailed(true);
@@ -90,15 +90,17 @@ function Ready({
 }: Extract<State, { kind: "ready" }> & { busy: string | null; failed: boolean; onBought: () => void; onRelease: () => void }) {
   const first = r.name.split(/\s+/)[0];
   const name = gift?.name ?? "o presente";
+  // "2 unidades de Jogo de lençol" when the guest is giving more than one.
+  const what = r.units > 1 ? `${r.units} unidades de ${name}` : name;
 
   if (r.status === "bought")
-    return <Message title={`Obrigado, ${first}!`}>Você confirmou a compra de <strong>{name}</strong>. A gente vai amar.</Message>;
+    return <Message title={`Obrigado, ${first}!`}>Você confirmou a compra de <strong>{what}</strong>. A gente vai amar.</Message>;
   if (r.status === "released")
-    return <Message title="Reserva desfeita">Você desistiu de <strong>{name}</strong> e ele voltou para a lista.</Message>;
+    return <Message title="Reserva desfeita">Você desistiu de <strong>{what}</strong> e {r.units > 1 ? "elas voltaram" : "ele voltou"} para a lista.</Message>;
   if (r.status === "expired" || !holdsGift(r, gift))
     return (
       <Message title="Sua reserva expirou">
-        O prazo de {HOLD_HOURS} horas acabou e <strong>{name}</strong> voltou para a lista. Se ainda quiser dar este presente,
+        O prazo de {HOLD_HOURS} horas acabou e <strong>{what}</strong> {r.units > 1 ? "voltaram" : "voltou"} para a lista. Se ainda quiser dar este presente,
         veja se ele continua disponível.
       </Message>
     );
@@ -108,6 +110,7 @@ function Ready({
   return (
     <div className={styles.ready}>
       <h1 className={styles.title}>{name}</h1>
+      {r.units > 1 && <p className={styles.lead}>Você está dando <strong>{r.units} unidades</strong>.</p>}
       <p className={styles.lead}>
         {late
           ? `${first}, o prazo da sua reserva acabou, mas o presente ainda está com você. Se já comprou, confirme agora.`

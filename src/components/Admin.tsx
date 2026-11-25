@@ -11,16 +11,24 @@ import { TextArea } from "@astryxdesign/core/TextArea";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { ROOMS, TIERS, type Delivery, type Gift } from "@/data/gifts";
 import {
-  boughtByUs, deleteGift, fetchAll, logOut, markBought, publish, release, saveDelivery, setTier, signIn, watchUser,
-  type AdminData,
+  boughtByUs, deleteGift, fetchAll, logOut, markBought, publish, releaseHold, saveDelivery, setTier, signIn, undoPurchases,
+  watchUser, type AdminData,
 } from "@/lib/admin";
-import { formatBRL, holdEnds } from "@/lib/catalog";
+import { formatBRL, holdEndsAt, unitsLeft } from "@/lib/catalog";
 import { ADMIN_UIDS, fetchDelivery, type Reservation } from "@/lib/firebase";
 import { GiftForm } from "./GiftForm";
 import { hide } from "@/lib/hooks";
 import styles from "./Admin.module.css";
 
-type Filter = "todos" | Gift["status"];
+type Filter = "todos" | "draft" | "open" | "reserved" | "bought";
+
+// A gift can be in more than one: partly bought, partly held, and still open.
+const FILTERS: Record<Exclude<Filter, "todos">, (g: Gift) => boolean> = {
+  draft: (g) => g.status === "draft",
+  open: (g) => g.status === "available" && unitsLeft(g) > 0,
+  reserved: (g) => Object.keys(g.holds).length > 0,
+  bought: (g) => g.boughtUnits > 0,
+};
 
 export function Admin() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
@@ -109,8 +117,8 @@ function Gifts() {
 
   if (!data) return <p>{failed ? "Não deu para carregar. Recarregue a página." : "Carregando presentes…"}</p>;
 
-  const shown = data.gifts.filter((g) => filter === "todos" || g.status === filter);
-  const count = (s: Gift["status"]) => data.gifts.filter((g) => g.status === s).length;
+  const shown = data.gifts.filter((g) => filter === "todos" || FILTERS[filter](g));
+  const count = (f: Exclude<Filter, "todos">) => data.gifts.filter(FILTERS[f]).length;
 
   return (
     <section className={styles.section}>
@@ -118,7 +126,7 @@ function Gifts() {
         <SegmentedControl label="Status" value={filter} onChange={(v) => setFilter(v as Filter)} size="sm">
           <SegmentedControlItem value="todos" label={`Todos (${data.gifts.length})`} />
           <SegmentedControlItem value="draft" label={`Rascunho (${count("draft")})`} />
-          <SegmentedControlItem value="available" label={`Disponível (${count("available")})`} />
+          <SegmentedControlItem value="open" label={`Disponível (${count("open")})`} />
           <SegmentedControlItem value="reserved" label={`Reservado (${count("reserved")})`} />
           <SegmentedControlItem value="bought" label={`Comprado (${count("bought")})`} />
         </SegmentedControl>
@@ -137,7 +145,7 @@ function Gifts() {
                 <Row
                   key={g.id}
                   gift={g}
-                  res={data.current[g.id]}
+                  reservations={data.active[g.id] ?? []}
                   now={now}
                   busy={busy === g.id}
                   onAction={(fn) => run(g.id, fn)}
@@ -170,22 +178,29 @@ function Gifts() {
   );
 }
 
-const STATUS: Record<Gift["status"], string> = { draft: "Rascunho", available: "Disponível", reserved: "Reservado", bought: "Comprado" };
+const when = (ms: number) => new Date(ms).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 
 function Row({
-  gift: g, res, now, busy, onAction, onEdit, onDelete,
+  gift: g, reservations, now, busy, onAction, onEdit, onDelete,
 }: {
   gift: Gift;
+  reservations: Reservation[];
   now: number;
-  res?: Reservation;
   busy: boolean;
   onAction: (fn: () => Promise<unknown>) => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const ends = holdEnds(g);
-  const expired = ends !== null && ends < now;
-  const status = g.byCouple ? "Comprado por nós" : expired ? "Reserva expirada" : STATUS[g.status];
+  const left = unitsLeft(g);
+  const multi = g.quantity > 1;
+  const status =
+    g.status === "draft" ? "Rascunho"
+    : g.status === "bought" ? (g.givers.every((x) => x.byCouple) ? "Comprado por nós" : "Comprado")
+    : reservations.length && !left ? "Reservado"
+    : "Disponível";
+  const units = multi
+    ? `${g.boughtUnits} de ${g.quantity} compradas${g.heldUnits ? ` · ${g.heldUnits} ${g.heldUnits === 1 ? "reservada" : "reservadas"}` : ""}`
+    : null;
 
   return (
     <li className={styles.row} aria-busy={busy}>
@@ -194,35 +209,53 @@ function Row({
       <div className={styles.rowMain}>
         <strong>{g.name}</strong>
         <span className={styles.muted}>
-          {formatBRL(g.price)} · <span data-status={g.byCouple ? "couple" : g.status}>{status}</span>
+          {formatBRL(g.price)}{multi && " cada"} · <span data-status={status === "Comprado por nós" ? "couple" : g.status}>{status}</span>
+          {units && ` · ${units}`}
         </span>
-        {res && (
+        {g.givers.length > 0 && (
           <span className={styles.muted}>
-            {res.name} ({res.tier}) · {res.email} · {new Date(res.reservedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
-            {ends && !expired && ` · até ${new Date(ends).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}`}
+            Deram: {g.givers.map((x) => (x.byCouple ? "nós" : `${x.name} (${x.tier})`) + (multi ? ` ×${x.units}` : "")).join(", ")}
           </span>
         )}
+        {reservations.map((r) => {
+          const ends = holdEndsAt(r.reservedAt);
+          return (
+            <div key={r.token} className={styles.resRow}>
+              <span className={styles.muted}>
+                Reserva: {r.name} · {r.email}{multi && ` · ${r.units} un.`} · {when(r.reservedAt)}
+                {ends < now ? " · expirada" : ` · até ${when(ends)}`}
+              </span>
+              <span className={styles.resActions}>
+                <Button label="Marcar comprado" variant="primary" size="sm" isDisabled={busy} onClick={() => onAction(() => markBought(g, r))} />
+                <Button label="Liberar" variant="secondary" size="sm" isDisabled={busy} onClick={() => onAction(() => releaseHold(g, r))} />
+                <span className={styles.tier}>
+                  <Selector
+                    label={`Corrigir parentesco de ${r.name}`}
+                    isLabelHidden
+                    size="sm"
+                    options={TIERS.map((t) => ({ value: t, label: t }))}
+                    value={g.holds[r.holdId]?.giverTier ?? r.tier}
+                    onChange={(t) => onAction(() => setTier(g, r, t))}
+                  />
+                </span>
+              </span>
+            </div>
+          );
+        })}
       </div>
       <div className={styles.rowActions}>
         {g.status === "draft" && <Button label="Publicar" variant="primary" size="sm" isDisabled={busy} onClick={() => onAction(() => publish(g.id))} />}
-        {g.status === "reserved" && <Button label="Marcar comprado" variant="primary" size="sm" isDisabled={busy} onClick={() => onAction(() => markBought(g, res))} />}
-        {(g.status === "available" || g.status === "reserved") && (
-          <Button label="Comprado por nós" variant="secondary" size="sm" isDisabled={busy} onClick={() => onAction(() => boughtByUs(g, res))} />
+        {g.status !== "draft" && left > 0 && (
+          <Button
+            label={multi ? `Compramos as ${left === 1 ? "1 restante" : `${left} restantes`}` : "Comprado por nós"}
+            variant="secondary"
+            size="sm"
+            isDisabled={busy}
+            onClick={() => onAction(() => boughtByUs(g))}
+          />
         )}
-        {(g.status === "reserved" || g.status === "bought") && (
-          <Button label={g.status === "bought" ? "Desfazer compra" : "Liberar"} variant="secondary" size="sm" isDisabled={busy} onClick={() => onAction(() => release(g, res))} />
-        )}
-        {g.giverName && !g.byCouple && (
-          <div className={styles.tier}>
-            <Selector
-              label="Corrigir parentesco"
-              isLabelHidden
-              size="sm"
-              options={TIERS.map((t) => ({ value: t, label: t }))}
-              value={g.giverTier ?? undefined}
-              onChange={(t) => onAction(() => setTier(g, res, t))}
-            />
-          </div>
+        {g.boughtUnits > 0 && (
+          <Button label="Desfazer compras" variant="secondary" size="sm" isDisabled={busy} onClick={() => onAction(() => undoPurchases(g))} />
         )}
         <Button label="Editar" variant="ghost" size="sm" isDisabled={busy} onClick={onEdit} />
         <Button label="Excluir" variant="ghost" size="sm" isDisabled={busy} onClick={onDelete} />

@@ -60,7 +60,9 @@ ${delivery?.address ? `<div style="border:1px solid #d9d6c3;border-radius:4px;pa
 export function compose(kind, { res, gift, delivery, site }) {
   const link = `${site}/reserva?t=${res.token}`;
   const ends = when(res.reservedAt + HOLD_MS);
-  const name = esc(gift?.name ?? "o presente");
+  const units = res.units ?? 1;
+  // "2 unidades de Jogo de lençol" when the guest is giving more than one.
+  const name = units > 1 ? `${units} unidades de ${esc(gift?.name ?? "o presente")}` : esc(gift?.name ?? "o presente");
   if (kind === "welcome")
     return {
       subject: `Você reservou: ${gift?.name ?? "um presente"}`,
@@ -148,15 +150,15 @@ async function main() {
     try {
       const gift = await giftOf(res.giftId);
       if (kind === "expire") {
-        // Free the gift only if it is still this reservation's (same reservedAt); someone may have re-reserved it.
+        // Frees this reservation's units on the gift (its hold), if the hold is still there.
         await db.runTransaction(async (tx) => {
           const g = await tx.get(db.doc(`gifts/${res.giftId}`));
           const r = await tx.get(snap.ref);
           if (r.data().status !== "reserved") return;
-          if (g.exists && g.data().status === "reserved" && g.data().reservedAt?.toMillis() === res.reservedAt) {
-            tx.update(g.ref, { status: "available", reservedAt: null, giverName: null, giverTier: null });
-            tx.delete(db.doc(`giftLocks/${res.giftId}`));
-          }
+          const hold = g.exists ? g.data().holds?.[res.holdId] : null;
+          if (hold)
+            tx.update(g.ref, { [`holds.${res.holdId}`]: FieldValue.delete(), heldUnits: FieldValue.increment(-hold.units) });
+          tx.delete(db.doc(`holdLocks/${res.holdId}`));
           tx.update(snap.ref, { status: "expired", closedAt: FieldValue.serverTimestamp() });
         });
         // shortcut: e-mailed after the commit, so a crash right here loses this one notice; fine for a courtesy note

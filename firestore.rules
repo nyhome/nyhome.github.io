@@ -1,11 +1,17 @@
 rules_version = '2';
 
-// Guests have no account. A reservation's id is a random UUID the guest's browser makes and keeps
-// (it goes in their personal link): knowing it is the proof of ownership. Every guest write is a
-// batch, and each document's rule checks the others with get() (state before) / getAfter() (after).
-//   reserve  = create reservations/{token} + set giftLocks/{giftId} + update gifts/{giftId}
-//   confirm  = update reservations/{token} (bought)   + update gifts/{giftId} (bought)
-//   give up  = update reservations/{token} (released) + update gifts/{giftId} (available)
+// Guests have no account. A reservation's id is a random UUID the guest's browser makes and keeps (it goes in
+// their personal link): knowing it is the proof of ownership. A gift has `quantity` units; each reservation holds
+// some of them. On the public gift doc a reservation shows up only as holds[holdId] (another random id), and
+// holdLocks/{holdId} — readable by nobody — maps that hold back to the secret token.
+//
+// Every guest write is a batch, and each document's rule checks the others with get() (state before) and
+// getAfter() (state after). The gift doc names the hold being touched in `lastHold`, because rules can't pull
+// the one changed key out of a map diff.
+//   reserve  = create reservations/{token} + create holdLocks/{holdId} + gift: add holds[holdId], heldUnits += n
+//   confirm  = reservations/{token} → bought   + gift: drop hold, heldUnits -= n, boughtUnits += n, givers += giver
+//   give up  = reservations/{token} → released + gift: drop hold, heldUnits -= n
+// Holds past 72h are cleared by scripts/mailer.mjs; until then their units still count as taken.
 service cloud.firestore {
   match /databases/{db}/documents {
 
@@ -13,18 +19,9 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid in ['lEYtbTBbpfXaUdzz7sQq05Qz1c32', 'mVGO28Yprqcc7z60fCev1GdDlTo1'];
     }
 
-    // Same 72h as HOLD_HOURS in src/lib/catalog.ts and HOLD_MS in scripts/mailer.mjs.
-    function hold() { return duration.value(72, 'h'); }
-
     function giftPath(id) { return /databases/$(db)/documents/gifts/$(id); }
-    function lockPath(id) { return /databases/$(db)/documents/giftLocks/$(id); }
+    function lockPath(id) { return /databases/$(db)/documents/holdLocks/$(id); }
     function resPath(t) { return /databases/$(db)/documents/reservations/$(t); }
-
-    // Open to a new reservation: available, or reserved with the hold already over.
-    function reservable(g) {
-      return g.status == 'available'
-        || (g.status == 'reserved' && g.reservedAt + hold() < request.time);
-    }
 
     // Same list as TIERS in src/data/gifts.ts.
     function tiers() {
@@ -34,58 +31,75 @@ service cloud.firestore {
 
     match /gifts/{giftId} {
       function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+      // The holds map changed in exactly one key: the hold named in lastHold.
+      function onlyHold(hid) {
+        return request.resource.data.holds.diff(resource.data.holds).affectedKeys().hasOnly([hid]);
+      }
 
       function guestReserve() {
+        let before = resource.data;
         let after = request.resource.data;
-        let tok = getAfter(lockPath(giftId)).data.token;
-        let res = getAfter(resPath(tok)).data;
-        return reservable(resource.data)
-          && changed().hasOnly(['status', 'reservedAt', 'giverName', 'giverTier'])
-          && after.status == 'reserved'
-          && after.reservedAt == request.time
-          && after.giverName is string && after.giverName.size() > 0 && after.giverName.size() <= 30
-          && after.giverTier == res.tier
-          && res.giftId == giftId && res.status == 'reserved' && res.reservedAt == request.time;
+        let hid = after.lastHold;
+        let h = after.holds[hid];
+        let res = getAfter(resPath(getAfter(lockPath(hid)).data.token)).data;
+        return before.status == 'available'
+          && changed().hasOnly(['holds', 'heldUnits', 'lastHold'])
+          && hid is string && !before.holds.keys().hasAny([hid]) && onlyHold(hid)
+          && h.keys().hasOnly(['units', 'reservedAt', 'giverName', 'giverTier'])
+          && h.units is int && h.units >= 1
+          && h.reservedAt == request.time
+          && h.giverName is string && h.giverName.size() > 0 && h.giverName.size() <= 30
+          && after.heldUnits == before.heldUnits + h.units
+          && after.heldUnits + before.boughtUnits <= before.quantity
+          && res.giftId == giftId && res.holdId == hid && res.units == h.units && res.tier == h.giverTier
+          && res.status == 'reserved' && res.reservedAt == request.time;
       }
 
       // The lock is read as it was BEFORE the batch, so swapping it in the same batch doesn't help.
       function guestClose() {
+        let before = resource.data;
         let after = request.resource.data;
-        let tok = get(lockPath(giftId)).data.token;
-        let before = get(resPath(tok)).data;
+        let hid = after.lastHold;
+        let h = before.holds[hid];
+        let tok = get(lockPath(hid)).data.token;
+        let prev = get(resPath(tok)).data;
         let res = getAfter(resPath(tok)).data;
-        return resource.data.status == 'reserved'
-          && before.status == 'reserved' && before.giftId == giftId
+        let bought = before.boughtUnits + h.units;
+        return before.holds.keys().hasAny([hid]) && !after.holds.keys().hasAny([hid]) && onlyHold(hid)
+          && prev.status == 'reserved' && prev.holdId == hid && prev.giftId == giftId
+          && after.heldUnits == before.heldUnits - h.units
           && (
-            (after.status == 'bought' && res.status == 'bought' && changed().hasOnly(['status']))
-            || (after.status == 'available' && res.status == 'released'
-                && changed().hasOnly(['status', 'reservedAt', 'giverName', 'giverTier'])
-                && after.reservedAt == null && after.giverName == null && after.giverTier == null)
+            (res.status == 'bought'
+              && changed().hasOnly(['holds', 'heldUnits', 'lastHold', 'boughtUnits', 'givers', 'status'])
+              && after.boughtUnits == bought
+              && after.givers == before.givers.concat([{ 'name': h.giverName, 'tier': h.giverTier, 'units': h.units }])
+              && ((bought >= before.quantity && after.status == 'bought')
+                  || (bought < before.quantity && after.status == before.status)))
+            || (res.status == 'released' && changed().hasOnly(['holds', 'heldUnits', 'lastHold']))
           );
       }
 
-      allow read: if isAdmin() || resource.data.status in ['available', 'reserved', 'bought'];
+      allow read: if isAdmin() || resource.data.status in ['available', 'bought'];
       allow create, delete: if isAdmin();
       allow update: if isAdmin() || guestReserve() || guestClose();
     }
 
-    // Who holds each gift. Nobody but admins can read it, so the token never leaks through a gift.
-    match /giftLocks/{giftId} {
-      allow read, delete: if isAdmin();
-      allow create, update: if isAdmin() || (
-        request.resource.data.keys().hasOnly(['token'])
+    // Who owns each hold. Nobody but admins can read it, so the token never leaks through a gift.
+    match /holdLocks/{holdId} {
+      allow read, update, delete: if isAdmin();
+      allow create: if isAdmin() || (
+        request.resource.data.keys().hasOnly(['token', 'giftId'])
         && request.resource.data.token is string
-        && reservable(get(giftPath(giftId)).data)
-        && getAfter(giftPath(giftId)).data.status == 'reserved'
-        && getAfter(giftPath(giftId)).data.reservedAt == request.time
-        && getAfter(resPath(request.resource.data.token)).data.giftId == giftId
-        && getAfter(resPath(request.resource.data.token)).data.reservedAt == request.time
+        && get(giftPath(request.resource.data.giftId)).data.status == 'available'
+        && getAfter(giftPath(request.resource.data.giftId)).data.holds[holdId].reservedAt == request.time
+        && getAfter(resPath(request.resource.data.token)).data.holdId == holdId
+        && getAfter(resPath(request.resource.data.token)).data.giftId == request.resource.data.giftId
       );
     }
 
     match /reservations/{token} {
       function fields() {
-        return ['giftId', 'name', 'email', 'tier', 'status', 'reservedAt', 'adminNotified'];
+        return ['giftId', 'holdId', 'units', 'name', 'email', 'tier', 'status', 'reservedAt', 'adminNotified'];
       }
 
       // The id is the secret: fetching by id is fine, listing is not.
@@ -97,6 +111,8 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(fields())
         && request.resource.data.keys().hasAll(fields())
         && request.resource.data.giftId is string
+        && request.resource.data.holdId is string
+        && request.resource.data.units is int && request.resource.data.units >= 1
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60
         && request.resource.data.email is string && request.resource.data.email.size() <= 120
@@ -105,23 +121,21 @@ service cloud.firestore {
         && request.resource.data.status == 'reserved'
         && request.resource.data.reservedAt == request.time
         && request.resource.data.adminNotified == false
-        && getAfter(lockPath(request.resource.data.giftId)).data.token == token
-        && getAfter(giftPath(request.resource.data.giftId)).data.status == 'reserved'
-        && getAfter(giftPath(request.resource.data.giftId)).data.reservedAt == request.time
+        && getAfter(lockPath(request.resource.data.holdId)).data.token == token
+        && getAfter(giftPath(request.resource.data.giftId)).data.holds[request.resource.data.holdId].reservedAt == request.time
       );
 
       allow update: if isAdmin() || (
         resource.data.status == 'reserved'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'closedAt'])
+        && request.resource.data.status in ['bought', 'released']
         && request.resource.data.closedAt == request.time
-        && get(lockPath(resource.data.giftId)).data.token == token
-        && get(giftPath(resource.data.giftId)).data.status == 'reserved'
-        && (
-          (request.resource.data.status == 'bought'
-            && getAfter(giftPath(resource.data.giftId)).data.status == 'bought')
-          || (request.resource.data.status == 'released'
-            && getAfter(giftPath(resource.data.giftId)).data.status == 'available')
-        )
+        && get(lockPath(resource.data.holdId)).data.token == token
+        && get(giftPath(resource.data.giftId)).data.holds.keys().hasAny([resource.data.holdId])
+        && !getAfter(giftPath(resource.data.giftId)).data.holds.keys().hasAny([resource.data.holdId])
+        && (request.resource.data.status == 'released'
+            || getAfter(giftPath(resource.data.giftId)).data.boughtUnits
+               == get(giftPath(resource.data.giftId)).data.boughtUnits + resource.data.units)
       );
     }
 

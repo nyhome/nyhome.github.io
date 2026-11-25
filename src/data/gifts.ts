@@ -12,8 +12,8 @@ export interface Room {
   photo: Photo;
 }
 
-/** draft = only admins see it; reserved = held 72h by a guest; bought = done (by a guest or by the couple). */
-export type GiftStatus = "draft" | "available" | "reserved" | "bought";
+/** draft = only admins see it; bought = every unit bought (by guests or the couple). Holds live in `holds`. */
+export type GiftStatus = "draft" | "available" | "bought";
 
 export interface GiftLink {
   store: string;
@@ -39,11 +39,31 @@ export interface Gift {
   links: GiftLink[];
   photos: string[];
   status: GiftStatus;
-  /** Epoch ms of the reservation; the hold ends 72h later (see HOLD_HOURS). */
-  reservedAt: number | null;
-  giverName: string | null;
-  giverTier: string | null;
-  byCouple: boolean;
+  /** Units wanted; guests each give some (one reservation per guest). Single gifts are just quantity 1. */
+  quantity: number;
+  boughtUnits: number;
+  /** Units inside active holds; kept as a counter because security rules can't sum the holds map. */
+  heldUnits: number;
+  /** Public side of each active reservation, keyed by a random hold id (the reservation token stays secret). */
+  holds: Record<string, Hold>;
+  /** Who gave the bought units, in order. */
+  givers: Giver[];
+}
+
+export interface Hold {
+  units: number;
+  /** Epoch ms; the hold ends 72h later (see HOLD_HOURS). */
+  reservedAt: number;
+  giverName: string;
+  giverTier: string;
+}
+
+export interface Giver {
+  name: string;
+  tier: string;
+  units: number;
+  /** Bought by the couple themselves ("Dos noivos"). */
+  byCouple?: boolean;
 }
 
 // Same list as VOLTAGES in scripts/api.mjs.

@@ -6,7 +6,7 @@ import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog";
 import { Selector } from "@astryxdesign/core/Selector";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { TIERS, type Delivery, type Gift } from "@/data/gifts";
-import { HOLD_HOURS, formatBRL, giverLabel, holdEnds, isSoldOut } from "@/lib/catalog";
+import { HOLD_HOURS, formatBRL, giverLabel, isSoldOut, unitsLabel, unitsLeft } from "@/lib/catalog";
 import { reserveGift } from "@/lib/firebase";
 import { useIsNarrow } from "@/lib/hooks";
 import { CopyButton } from "./CopyButton";
@@ -14,14 +14,13 @@ import { Gallery } from "./Gallery";
 import { DeliveryNote, ModelBox, StoreLinks, VoltageNote } from "./GiftInfo";
 import styles from "./GiftDialog.module.css";
 
-type Step = { kind: "details" } | { kind: "reserve" } | { kind: "done"; guest: string; until: Date; link: string };
+type Step = { kind: "details" } | { kind: "reserve" } | { kind: "done"; guest: string; units: number; until: Date; link: string };
 type Errors = Partial<Record<"name" | "email" | "tier" | "form" | "race", string>>;
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 interface Props {
   gift: Gift | null;
-  now: number;
   delivery: Delivery | null;
   onClose: () => void;
   /** After a reservation (or a lost race), so the list reloads. */
@@ -29,7 +28,7 @@ interface Props {
 }
 
 /** Details, then the reservation form in the same dialog, then the confirmation with the personal link. */
-export function GiftDialog({ gift, now, delivery, onClose, onChanged }: Props) {
+export function GiftDialog({ gift, delivery, onClose, onChanged }: Props) {
   const narrow = useIsNarrow();
   return (
     <Dialog
@@ -41,12 +40,12 @@ export function GiftDialog({ gift, now, delivery, onClose, onChanged }: Props) {
       purpose="form"
     >
       {/* Keyed by gift so each opening starts on the details step with an empty form. */}
-      {gift && <Content key={gift.id} gift={gift} now={now} delivery={delivery} onClose={onClose} onChanged={onChanged} />}
+      {gift && <Content key={gift.id} gift={gift} delivery={delivery} onClose={onClose} onChanged={onChanged} />}
     </Dialog>
   );
 }
 
-function Content({ gift, now, delivery, onClose, onChanged }: Omit<Props, "gift"> & { gift: Gift }) {
+function Content({ gift, delivery, onClose, onChanged }: Omit<Props, "gift"> & { gift: Gift }) {
   const [step, setStep] = useState<Step>({ kind: "details" });
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -54,7 +53,10 @@ function Content({ gift, now, delivery, onClose, onChanged }: Omit<Props, "gift"
   const [errors, setErrors] = useState<Errors>({});
   const [busy, setBusy] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
-  const soldOut = isSoldOut(gift, now);
+  const soldOut = isSoldOut(gift);
+  const left = unitsLeft(gift);
+  const [units, setUnits] = useState(1);
+  const giver = giverLabel(gift);
 
   // The reserve button that had focus is gone; put the guest straight into the name field.
   useEffect(() => {
@@ -74,10 +76,11 @@ function Content({ gift, now, delivery, onClose, onChanged }: Omit<Props, "gift"
 
     setBusy(true);
     try {
-      const token = await reserveGift(gift.id, { name: guest, email, tier: tier! });
+      const token = await reserveGift(gift.id, { name: guest, email, tier: tier!, units: Math.min(units, left) });
       setStep({
         kind: "done",
         guest,
+        units: Math.min(units, left),
         until: new Date(Date.now() + HOLD_HOURS * 3600_000),
         link: `${window.location.origin}/reserva?t=${token}`,
       });
@@ -86,7 +89,9 @@ function Content({ gift, now, delivery, onClose, onChanged }: Omit<Props, "gift"
       const denied = (err as { code?: string }).code === "permission-denied";
       setErrors({
         form: denied
-          ? "Alguém acabou de reservar este presente. A lista foi atualizada."
+          ? gift.quantity > 1
+            ? "Outro convidado acabou de reservar unidades deste presente. A lista foi atualizada; confira quantas faltam."
+            : "Alguém acabou de reservar este presente. A lista foi atualizada."
           : "Não conseguimos reservar agora. Confira sua conexão e tente de novo.",
         race: denied ? "1" : undefined,
       });
@@ -103,8 +108,6 @@ function Content({ gift, now, delivery, onClose, onChanged }: Omit<Props, "gift"
       </Button>
     ) : undefined;
 
-  const ends = holdEnds(gift);
-
   return (
     <>
       <DialogHeader
@@ -118,7 +121,11 @@ function Content({ gift, now, delivery, onClose, onChanged }: Omit<Props, "gift"
           <div className={styles.details}>
             <Gallery photos={gift.photos} name={gift.name} />
             <div className={styles.info}>
-              <p className={styles.price}>{formatBRL(gift.price)}</p>
+              <p className={styles.price}>
+                {formatBRL(gift.price)}
+                {gift.quantity > 1 && <span className={styles.each}> cada</span>}
+              </p>
+              {unitsLabel(gift) && <p className={styles.units}>{unitsLabel(gift)}</p>}
               <p className={styles.note}>Preço de referência. Confira o valor e o estoque na loja.</p>
               {gift.description && <p className={styles.description}>{gift.description}</p>}
               <ModelBox gift={gift} />
@@ -131,13 +138,16 @@ function Content({ gift, now, delivery, onClose, onChanged }: Omit<Props, "gift"
                 </dl>
               )}
               <StoreLinks gift={gift} />
-              {soldOut && (
+              {gift.status === "bought" ? (
+                <p className={styles.reserved}>Este presente já foi dado{giver ? ` (${giver})` : ""}. Obrigado!</p>
+              ) : soldOut ? (
                 <p className={styles.reserved}>
-                  {gift.status === "bought"
-                    ? `Este presente já foi dado${giverLabel(gift) ? ` (${giverLabel(gift)})` : ""}. Obrigado!`
-                    : `Outro convidado reservou este presente. Se a compra não for confirmada até ${fmt(new Date(ends!))}, ele volta para a lista.`}
+                  {gift.quantity > 1 ? "Todas as unidades já foram reservadas" : "Outro convidado reservou este presente"}. Se uma
+                  compra não for confirmada em até {HOLD_HOURS} horas, ela volta para a lista.
                 </p>
-              )}
+              ) : giver && gift.quantity > 1 ? (
+                <p className={styles.reserved}>{giver}. Ainda dá para dar {left === 1 ? "1 unidade" : `${left} unidades`}.</p>
+              ) : null}
               <div className={styles.actions}>
                 <Button
                   label={soldOut ? "Esgotado" : "Reservar presente"}
@@ -158,6 +168,18 @@ function Content({ gift, now, delivery, onClose, onChanged }: Omit<Props, "gift"
               O presente fica reservado para você por {HOLD_HOURS} horas, tempo para comprar na loja e marcar
               <strong> Já comprei</strong> pelo link que enviamos para o seu e-mail.
             </p>
+            {left > 1 && (
+              <Selector
+                label="Quantas unidades você vai dar?"
+                size="lg"
+                options={Array.from({ length: left }, (_, i) => ({
+                  value: String(i + 1),
+                  label: `${i + 1} ${i === 0 ? "unidade" : "unidades"} · ${formatBRL(gift.price * (i + 1))}`,
+                }))}
+                value={String(units)}
+                onChange={(v) => setUnits(Number(v))}
+              />
+            )}
             <TextInput
               label="Seu nome"
               value={name}
@@ -211,7 +233,8 @@ function Content({ gift, now, delivery, onClose, onChanged }: Omit<Props, "gift"
         {step.kind === "done" && (
           <div className={styles.done}>
             <p className={styles.lead}>
-              Está reservado para <strong>{step.guest}</strong> até {fmt(step.until)}. Compre na loja e depois volte pelo
+              {step.units > 1 ? `${step.units} unidades estão reservadas` : "Está reservado"} para <strong>{step.guest}</strong> até{" "}
+              {fmt(step.until)}. Compre na loja e depois volte pelo
               seu link para marcar <strong>Já comprei</strong> ou desistir do presente.
             </p>
             <div className={styles.linkBox}>

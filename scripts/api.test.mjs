@@ -91,3 +91,13 @@ test("mergeUpdate changes only price/links/status, normalized, and never a held 
   assert.ok(mergeUpdate({ ...current, status: "reserved" }, { status: "draft" }).errors);
   assert.deepEqual(mergeUpdate({ ...current, status: "bought" }, { price: 99 }).update, { price: 99 });
 });
+
+test("quantity defaults to 1, must be a whole number, and can't drop below units already taken", () => {
+  assert.equal(validateProduct(ok).value.quantity, 1);
+  assert.equal(validateProduct({ ...ok, quantity: "3" }).value.quantity, 3);
+  assert.ok(validateProduct({ ...ok, quantity: 0 }).errors);
+  assert.ok(validateProduct({ ...ok, quantity: 2.5 }).errors);
+  const current = { ...ok, status: "available", quantity: 3, boughtUnits: 1, heldUnits: 1 };
+  assert.deepEqual(mergeUpdate(current, { quantity: 4 }).update, { quantity: 4 });
+  assert.ok(mergeUpdate(current, { quantity: 1 }).errors[0].includes("2 unidades"));
+});

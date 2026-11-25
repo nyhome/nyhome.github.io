@@ -109,6 +109,24 @@
   font-weight: 500;
 }
 
+.resRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--olive-light);
+}
+
+.resActions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
 .rowActions {
   display: flex;
   flex-wrap: wrap;
