@@ -65,7 +65,8 @@
   border: 0;
   cursor: pointer;
   overflow: hidden;
-  background: var(--olive-light);
+  /* Store photos are product shots on white: a white frame lets the whole product show without a visible box. */
+  background: #fff;
   clip-path: inset(0 0 100% 0);
   transition: clip-path 1s var(--ease-out) calc(var(--delay) + 0.15s);
 }
@@ -75,7 +76,9 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  /* contain, not cover: wide products (air conditioner, TV) must not lose their sides. */
+  object-fit: contain;
+  padding: 8%;
   transition: transform 0.6s var(--ease-out);
 }
 
