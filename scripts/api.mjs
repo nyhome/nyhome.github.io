@@ -15,7 +15,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 
-const ROOMS = ["sala", "cozinha", "banheiro", "quarto", "escritorio", "externa"];
+const ROOMS = ["sala", "cozinha", "banheiro", "quarto", "escritorio", "servico"];
 // Same list as VOLTAGES in src/data/gifts.ts.
 const VOLTAGES = ["127V", "220V", "Bivolt"];
 const PORT = Number(process.env.PORT ?? 4321);

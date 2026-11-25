@@ -1,4 +1,4 @@
-export type RoomId = "sala" | "cozinha" | "banheiro" | "quarto" | "escritorio" | "externa";
+export type RoomId = "sala" | "cozinha" | "banheiro" | "quarto" | "escritorio" | "servico";
 
 export interface Photo {
   /** Unsplash photo id, the part after `photo-` in the image URL. */
@@ -72,5 +72,5 @@ export const ROOMS: Room[] = [
   { id: "banheiro", name: "Banheiro", photo: { id: "1620626011761-996317b8d101", alt: "Banheiro branco com banheira e plantas" } },
   { id: "quarto", name: "Quarto", photo: { id: "1615874959474-d609969a20ed", alt: "Quarto com roupa de cama verde e luz natural" } },
   { id: "escritorio", name: "Escritório", photo: { id: "1524758631624-e2822e304c36", alt: "Escritório iluminado com poltronas e luminária de piso" } },
-  { id: "externa", name: "Área externa", photo: { id: "1600566753190-17f0baa2a6c3", alt: "Fachada de casa com jardim em um dia claro" } },
+  { id: "servico", name: "Área de serviço", photo: { id: "1778731660248-044f78e8c1fb", alt: "Lavanderia com lavadora e secadora lado a lado e cestos na bancada" } },
 ];
