@@ -101,3 +101,9 @@ test("quantity defaults to 1, must be a whole number, and can't drop below units
   assert.deepEqual(mergeUpdate(current, { quantity: 4 }).update, { quantity: 4 });
   assert.ok(mergeUpdate(current, { quantity: 1 }).errors[0].includes("2 unidades"));
 });
+
+test("mergeUpdate won't hide a gift that has active reservations", () => {
+  const current = { ...ok, status: "available", quantity: 3, boughtUnits: 0, heldUnits: 1 };
+  assert.ok(mergeUpdate(current, { status: "draft" }).errors[0].includes("reservas ativas"));
+  assert.deepEqual(mergeUpdate(current, { price: 50 }).update, { price: 50 });
+});

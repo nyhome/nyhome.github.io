@@ -125,6 +125,8 @@ export function mergeUpdate(current, patch) {
   const taken = (current.boughtUnits ?? 0) + (current.heldUnits ?? 0);
   if (patch.quantity !== undefined && Number(patch.quantity) < taken)
     return { errors: [`já tem ${taken} unidades reservadas ou compradas; quantity não pode ser menor`] };
+  if (patch.status !== undefined && (current.heldUnits ?? 0) > 0)
+    return { errors: ["o presente tem reservas ativas; o status dele não muda por aqui"] };
   if (patch.status !== undefined && !["available", "draft"].includes(current.status))
     return { errors: [`o presente está "${current.status}"; o status dele não muda por aqui`] };
   const { value, errors } = validateProduct({
