@@ -3,6 +3,7 @@
 //
 //   npm run importar -- <url> [<url> ...]          save drafts (needs service-account.json, or FIRESTORE_EMULATOR_HOST)
 //   npm run importar -- --dry <url>                 print what it would save
+//   npm run importador                              keep running: process links queued in /admin (Importar tab)
 // Env: OLLAMA_MODEL (default qwen2.5:7b), OLLAMA_URL (default http://localhost:11434).
 // The browser profile lives in .playwright-profile/, so a login or captcha you solve once is remembered.
 import { existsSync, readFileSync } from "node:fs";
@@ -61,6 +62,9 @@ export function nameFromModel(model, brand = "") {
   return rest.split(/,|\s(?:com|para)\s|\s\S*\d/i)[0].split(/\s+/).slice(0, 3).join(" ").trim();
 }
 
+/** A coupon looks like a code (CASA10, PRIMEIRACOMPRA); anything else the model says is dropped. */
+export const couponOf = (c) => (/^[A-Z0-9][A-Z0-9_-]{2,24}$/i.test(String(c ?? "").trim()) ? String(c).trim().toUpperCase() : "");
+
 /** Drops sprites and icons, and collapses Amazon's many sizes of one photo into its full-size URL. */
 export function cleanPhotos(urls) {
   const out = [];
@@ -70,6 +74,50 @@ export function cleanPhotos(urls) {
     if (!out.includes(full)) out.push(full);
   }
   return out;
+}
+
+/** Model codes worth searching elsewhere: tokens mixing letters and digits ("OCAF650", "RI2240/91"), never plain words or sizes. */
+export function modelCodes(model) {
+  return [...new Set(String(model ?? "").toUpperCase().split(/[\s,;()]+/))]
+    .map((t) => t.replace(/^[^A-Z0-9]+|[^A-Z0-9]+$/g, ""))
+    .filter((t) => t.length >= 4 && /[A-Z]/.test(t) && /\d/.test(t) && !/^\d+[A-Z]{1,3}$/.test(t));
+}
+
+const SEARCH = {
+  Amazon: (q) => `https://www.amazon.com.br/s?k=${encodeURIComponent(q)}`,
+  "Mercado Livre": (q) => `https://lista.mercadolivre.com.br/${encodeURIComponent(q)}`,
+  Shopee: (q) => `https://shopee.com.br/search?keyword=${encodeURIComponent(q)}`,
+};
+const PRODUCT_URL = { Amazon: /\/dp\/[A-Z0-9]{10}/, "Mercado Livre": /MLB-?\d+|\/p\/MLB/, Shopee: /-i\.\d+\.\d+/ };
+
+/** The same model at the other big stores: first search result whose title contains the model code. */
+async function otherStores(page, draft) {
+  const code = modelCodes(draft.model)[0];
+  if (!code) return [];
+  const have = new Set(draft.links.map((l) => l.store));
+  const found = [];
+  for (const [store, search] of Object.entries(SEARCH)) {
+    if (have.has(store)) continue;
+    try {
+      await page.goto(search(code), { waitUntil: "domcontentloaded", timeout: 20_000 });
+      await page.waitForTimeout(2500);
+      // Captcha or "verify traffic" wall: skip this store instead of holding the queue (npm run importador:login helps).
+      if (/captcha|verify|login|signin/i.test(page.url())) continue;
+      const href = await page.evaluate(
+        ({ code, pattern }) => {
+          const norm = (t) => t.toUpperCase().replace(/[^A-Z0-9]/g, "");
+          const re = new RegExp(pattern);
+          const a = [...document.querySelectorAll("a[href]")].find((el) => re.test(el.href) && norm(el.textContent || el.closest("[data-component-type], li, div")?.textContent || "").includes(norm(code)));
+          return a ? a.href.split("#")[0] : null;
+        },
+        { code, pattern: PRODUCT_URL[store].source },
+      );
+      if (href) found.push({ store, url: href.split("?")[0].replace(/\/ref=.*$/, "") });
+    } catch {
+      // A store that blocks or times out just doesn't make the list.
+    }
+  }
+  return found;
 }
 
 // Runs inside the page.
@@ -134,9 +182,10 @@ const SCHEMA = {
     dims: { type: "string", description: "Dimensões físicas (comprimento x largura x altura ou diâmetro), ex.: '160 x 40 cm'. Nunca peso nem volume. Vazio se não houver" },
     description: { type: "string", description: "Uma frase curta e simpática dizendo para que serve, em português" },
     room: { type: "string", enum: ROOMS },
+    coupon: { type: "string", description: "Código de cupom de desconto escrito na página, ex.: 'CASA10'. Vazio se não houver. Nunca invente" },
     photos: { type: "array", items: { type: "integer" }, maxItems: 6, description: "Índices das imagens que mostram o próprio produto, na melhor ordem, no máximo 6" },
   },
-  required: ["name", "brand", "price", "dims", "description", "room", "photos"],
+  required: ["name", "brand", "price", "dims", "description", "room", "coupon", "photos"],
 };
 
 async function extract(data) {
@@ -185,13 +234,13 @@ export function toDraft(url, data, ai) {
     description: (ai.description || "").trim(),
     dims: /\d\s*(kg|g|ml|l)\b/i.test(ai.dims ?? "") ? "" : (ai.dims || "").trim(),
     price: ldPrice(data.product) ?? parsePrice(data.metaPrice) ?? parsePrice(ai.price) ?? 0,
-    links: [{ store: storeName(url), url: data.canonical || url }],
+    links: [{ store: storeName(url), url: data.canonical || url, ...(couponOf(ai.coupon) ? { coupon: couponOf(ai.coupon) } : {}) }],
     // The model only picks indices from what the page had, so it can't invent URLs.
     photos: photos.slice(0, 6),
   };
 }
 
-async function saver() {
+async function firestore() {
   const { initializeApp, cert } = await import("firebase-admin/app");
   const { getFirestore, FieldValue } = await import("firebase-admin/firestore");
   if (process.env.FIRESTORE_EMULATOR_HOST) initializeApp({ projectId: "demo-casa-ny" });
@@ -200,49 +249,68 @@ async function saver() {
     if (!existsSync(key)) throw new Error("Falta o service-account.json na raiz do projeto (ou use --dry).");
     initializeApp({ credential: cert(JSON.parse(readFileSync(key, "utf8"))) });
   }
-  const db = getFirestore();
-  return (draft) =>
-    db.collection("gifts").add({
-      ...draft, status: "draft", reservedAt: null, giverName: null, giverTier: null, byCouple: false, createdAt: FieldValue.serverTimestamp(),
-    });
+  return { db: getFirestore(), FieldValue };
 }
 
-async function main() {
-  const args = process.argv.slice(2);
-  const dry = args.includes("--dry");
-  const urls = args.filter((a) => /^https?:\/\//.test(a));
-  if (!urls.length) {
-    console.log("Uso: npm run importar -- [--dry] <url> [<url> ...]");
-    process.exit(1);
-  }
-  const save = dry ? null : await saver();
+// The CLI saves drafts to review; the queue (links sent from the phone) publishes straight away.
+const saveDraft = ({ db, FieldValue }, draft, status = "draft") =>
+  db.collection("gifts").add({
+    ...draft, status, reservedAt: null, giverName: null, giverTier: null, byCouple: false, createdAt: FieldValue.serverTimestamp(),
+  });
+
+async function openBrowser() {
   const { chromium } = await import("playwright");
   const ctx = await chromium.launchPersistentContext(fileURLToPath(new URL("../.playwright-profile", import.meta.url)), {
     channel: "chrome", headless: false, locale: "pt-BR", viewport: { width: 1280, height: 900 },
   });
+  return { ctx, page: ctx.pages()[0] ?? (await ctx.newPage()) };
+}
+
+const hasProduct = (data) => data.product || data.images.length >= 2;
+
+/** One listing → draft. `onBlocked` runs when the page looks like a login/captcha wall, then the page is read again. */
+async function importOne(page, url, onBlocked) {
+  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await page.waitForTimeout(2500);
+  let data = await page.evaluate(collect);
+  if (!hasProduct(data)) {
+    await onBlocked(page);
+    data = await page.evaluate(collect);
+  }
+  if (!data.images.length && !data.product) throw new Error(`a página não trouxe dados de produto (título: "${data.title}")`);
+  process.stdout.write(`  ${data.images.length} imagens, ${data.product ? "com" : "sem"} JSON-LD. Perguntando ao ${MODEL}... `);
+  const draft = toDraft(page.url() || url, data, await extract(data));
+  console.log("ok");
+  const more = await otherStores(page, draft);
+  if (more.length) console.log(`  Também em: ${more.map((l) => l.store).join(", ")}`);
+  draft.links.push(...more);
+  return draft;
+}
+
+/** Queue mode: someone solving the captcha in the Mac's Chrome window, if anyone is around; gives up after 90s. */
+async function waitForHuman(page) {
+  console.log("  A loja pediu login ou captcha. Esperando até 90s alguém resolver na janela do Chrome...");
+  for (let i = 0; i < 30; i++) {
+    await page.waitForTimeout(3000);
+    if (hasProduct(await page.evaluate(collect))) return;
+  }
+}
+
+async function cli(urls, dry) {
+  const fs = dry ? null : await firestore();
+  const { ctx, page } = await openBrowser();
   const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const page = ctx.pages()[0] ?? (await ctx.newPage());
+  const ask = async () => {
+    if (process.stdin.isTTY) await rl.question("  Parece que a página pediu login ou captcha. Resolva no navegador e aperte Enter... ");
+    await page.waitForTimeout(1500);
+  };
   let ok = 0;
   for (const url of urls) {
     console.log(`\n→ ${url}`);
     try {
-      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
-      await page.waitForTimeout(2500);
-      let data = await page.evaluate(collect);
-      if (!data.product && data.images.length < 2 && process.stdin.isTTY) {
-        await rl.question("  Parece que a página pediu login ou captcha. Resolva no navegador e aperte Enter... ");
-        await page.waitForTimeout(1500);
-        data = await page.evaluate(collect);
-      }
-      if (!data.images.length && !data.product) throw new Error(`a página não trouxe dados de produto (título: "${data.title}")`);
-      process.stdout.write(`  ${data.images.length} imagens, ${data.product ? "com" : "sem"} JSON-LD. Perguntando ao ${MODEL}... `);
-      const draft = toDraft(url, data, await extract(data));
-      console.log("ok");
+      const draft = await importOne(page, url, ask);
       console.log(JSON.stringify(draft, null, 2).replace(/^/gm, "  "));
-      if (save) {
-        const ref = await save(draft);
-        console.log(`  Salvo como rascunho (${ref.id}). Revise e publique em /admin.`);
-      }
+      if (fs) console.log(`  Salvo como rascunho (${(await saveDraft(fs, draft)).id}). Revise e publique em /admin.`);
       ok++;
     } catch (e) {
       console.log(`\n  Falhou: ${e.message}`);
@@ -252,6 +320,70 @@ async function main() {
   await ctx.close();
   console.log(`\n${ok} de ${urls.length} importados.`);
   process.exitCode = ok === urls.length ? 0 : 1;
+}
+
+/** Watches imports/ (filled by the admin panel or /admin?importar=) and turns each queued link into a draft. */
+async function queue() {
+  const fs = await firestore();
+  const { db, FieldValue } = fs;
+  const { page } = await openBrowser();
+  // Anything left "running" by a previous crash goes back to the queue.
+  for (const d of (await db.collection("imports").where("status", "==", "running").get()).docs) await d.ref.update({ status: "queued" });
+
+  const pending = [];
+  let busy = false;
+  const work = async () => {
+    if (busy) return;
+    busy = true;
+    while (pending.length) {
+      const ref = pending.shift();
+      const snap = await ref.get();
+      if (snap.data()?.status !== "queued") continue;
+      const { url } = snap.data();
+      console.log(`\n→ ${url}`);
+      await ref.update({ status: "running", updatedAt: FieldValue.serverTimestamp() });
+      try {
+        const draft = await importOne(page, url, waitForHuman);
+        const gift = await saveDraft(fs, draft, "available");
+        await ref.update({ status: "done", giftId: gift.id, name: draft.name, updatedAt: FieldValue.serverTimestamp() });
+        console.log(`  Publicado: ${draft.name} (${draft.price ? `R$ ${draft.price}` : "sem preço"})`);
+      } catch (e) {
+        await ref.update({ status: "error", error: String(e.message).slice(0, 200), updatedAt: FieldValue.serverTimestamp() });
+        console.log(`  Falhou: ${e.message}`);
+      }
+    }
+    busy = false;
+  };
+  db.collection("imports").where("status", "==", "queued").onSnapshot(
+    (snap) => {
+      for (const ch of snap.docChanges()) if (ch.type === "added") pending.push(ch.doc.ref);
+      work();
+    },
+    (e) => console.error("Fila caiu:", e.message),
+  );
+  console.log(`Importador ligado (modelo ${MODEL}). Esperando links do painel... Ctrl+C para parar.`);
+}
+
+/** Opens the importer's Chrome on each store so you can log in once; logged-in sessions get far fewer captchas. */
+async function login() {
+  const { ctx, page } = await openBrowser();
+  await page.goto("https://www.mercadolivre.com.br/login");
+  for (const u of ["https://shopee.com.br/buyer/login", "https://www.amazon.com.br/ap/signin?openid.pape.max_auth_age=0&openid.return_to=https%3A%2F%2Fwww.amazon.com.br%2F&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.assoc_handle=brflex&openid.mode=checkid_setup&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0"])
+    await (await ctx.newPage()).goto(u).catch(() => {});
+  console.log("Faça login nas lojas que quiser nas abas do Chrome e depois feche a janela.");
+  await new Promise((r) => ctx.on("close", r));
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  if (args.includes("--fila")) return queue();
+  if (args.includes("--login")) return login();
+  const urls = args.filter((a) => /^https?:\/\//.test(a));
+  if (!urls.length) {
+    console.log("Uso: npm run importar -- [--dry] <url> [<url> ...]   ou   npm run importador");
+    process.exit(1);
+  }
+  await cli(urls, args.includes("--dry"));
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) await main();

@@ -196,3 +196,40 @@
     grid-template-columns: 1fr;
   }
 }
+
+.jobRow {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.jobMain {
+  display: grid;
+  min-width: 0;
+}
+
+.jobMain > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jobStatus {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.jobStatus[data-status="running"] {
+  color: var(--terracotta);
+}
+
+.jobStatus[data-status="done"] {
+  color: var(--olive);
+}
+
+.jobStatus[data-status="error"] {
+  color: var(--color-text-error, #a33);
+}

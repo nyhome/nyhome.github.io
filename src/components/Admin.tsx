@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import { AlertDialog } from "@astryxdesign/core/AlertDialog";
 import { Button } from "@astryxdesign/core/Button";
@@ -11,8 +11,8 @@ import { TextArea } from "@astryxdesign/core/TextArea";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { ROOMS, TIERS, type Delivery, type Gift } from "@/data/gifts";
 import {
-  boughtByUs, deleteGift, fetchAll, logOut, markBought, publish, release, saveDelivery, setTier, signIn, watchUser,
-  type AdminData,
+  boughtByUs, deleteGift, enqueueImports, fetchAll, fetchImports, findUrls, logOut, markBought, publish, release, saveDelivery,
+  setTier, signIn, watchUser, type AdminData, type ImportJob,
 } from "@/lib/admin";
 import { formatBRL, holdEnds } from "@/lib/catalog";
 import { ADMIN_UIDS, fetchDelivery, type Reservation } from "@/lib/firebase";
@@ -52,7 +52,9 @@ export function Admin() {
 }
 
 function Panel({ user }: { user: User }) {
-  const [tab, setTab] = useState("presentes");
+  // /admin?importar=<link or shared text>: the iPhone share-sheet shortcut lands here and the link joins the queue.
+  const [shared] = useState(() => (typeof window === "undefined" ? [] : findUrls(new URLSearchParams(window.location.search).get("importar") ?? "")));
+  const [tab, setTab] = useState(shared.length ? "importar" : "presentes");
   return (
     <main className={styles.page}>
       <header className={styles.head}>
@@ -63,9 +65,10 @@ function Panel({ user }: { user: User }) {
       </header>
       <TabList value={tab} onChange={setTab}>
         <Tab value="presentes" label="Presentes" />
+        <Tab value="importar" label="Importar" />
         <Tab value="entrega" label="Entrega" />
       </TabList>
-      {tab === "presentes" ? <Gifts /> : <DeliveryForm />}
+      {tab === "presentes" ? <Gifts /> : tab === "importar" ? <Importer uid={user.uid} shared={shared} /> : <DeliveryForm />}
     </main>
   );
 }
@@ -264,5 +267,102 @@ function DeliveryForm() {
         {state === "error" && <span className={styles.error}>Não deu para salvar.</span>}
       </div>
     </form>
+  );
+}
+
+const JOB: Record<ImportJob["status"], string> = { queued: "Na fila", running: "Importando…", done: "Publicado", error: "Erro" };
+
+function Importer({ uid, shared }: { uid: string; shared: string[] }) {
+  const [text, setText] = useState("");
+  const [jobs, setJobs] = useState<ImportJob[] | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [now, setNow] = useState(0);
+  const sent = useRef(false);
+
+  const load = useCallback(
+    () =>
+      fetchImports()
+        .then((j) => {
+          setJobs(j);
+          setNow(Date.now());
+        })
+        .catch(() => setNote("Não deu para carregar a fila.")),
+    [],
+  );
+
+  const send = useCallback(
+    async (urls: string[]) => {
+      if (!urls.length) return setNote("Nenhum link encontrado. Cole links que começam com https://");
+      try {
+        await enqueueImports(urls, uid);
+        setNote(urls.length === 1 ? "Link na fila. Em instantes ele aparece publicado na lista." : `${urls.length} links na fila.`);
+        await load();
+      } catch {
+        setNote("Não deu para colocar na fila. Tente de novo.");
+      }
+    },
+    [uid, load],
+  );
+
+  useEffect(() => {
+    if (shared.length && !sent.current) {
+      sent.current = true;
+      window.history.replaceState(null, "", "/admin");
+      send(shared);
+    } else load();
+  }, [shared, send, load]);
+
+  // Poll while something is still being worked on.
+  const active = jobs?.some((j) => j.status === "queued" || j.status === "running");
+  useEffect(() => {
+    if (!active) return;
+    const t = setInterval(load, 4000);
+    return () => clearInterval(t);
+  }, [active, load]);
+
+  const stuck = jobs?.some((j) => j.status === "queued" && now - j.createdAt > 3 * 60_000);
+
+  return (
+    <section className={styles.section}>
+      <form
+        className={styles.form}
+        onSubmit={async (e) => {
+          e.preventDefault();
+          await send(findUrls(text));
+          setText("");
+        }}
+      >
+        <TextArea
+          label="Links de produtos"
+          description="Um ou mais links da Amazon, Mercado Livre, Shopee… A IA lê a página, pega nome, modelo, preço, fotos e cupom e publica na lista."
+          value={text}
+          onChange={setText}
+          rows={4}
+          placeholder="https://www.amazon.com.br/…"
+        />
+        <div className={styles.actions}>
+          <Button label="Importar" variant="primary" type="submit" />
+          {note && <span className={styles.muted}>{note}</span>}
+        </div>
+      </form>
+      {stuck && (
+        <p className={styles.error} role="alert">
+          Tem link parado na fila há mais de 3 minutos: o importador no Mac (npm run importador) não está rodando.
+        </p>
+      )}
+      {jobs && jobs.length > 0 && (
+        <ul className={styles.rows}>
+          {jobs.map((j) => (
+            <li key={j.id} className={styles.jobRow}>
+              <span data-status={j.status} className={styles.jobStatus}>{JOB[j.status]}</span>
+              <span className={styles.jobMain}>
+                <strong>{j.name ?? new URL(j.url).hostname.replace(/^www\./, "")}</strong>
+                <span className={styles.muted}>{j.error ?? j.url}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

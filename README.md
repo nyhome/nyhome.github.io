@@ -26,7 +26,15 @@ npm run test:rules   # regras de segurança no emulador
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8177 DRY_RUN=1 ADMIN_EMAILS=a@b.c npm run mailer   # e-mails sem enviar
 ```
 
-## Importar anúncios
+## Importar anúncios pelo painel ou pelo celular
+
+1. No Mac, deixe rodando: `brew services start ollama` (uma vez) e `npm run importador`.
+2. Cole links na aba **Importar** do `/admin`, ou abra `https://nyhome.github.io/admin?importar=<link>`, que é o que o Atalho do iPhone faz.
+3. O importador lê a página, pega nome, modelo, preço, fotos e cupom, procura o mesmo modelo em outras lojas e **publica direto**. O painel mostra o status de cada link.
+
+`npm run importador:login` abre o Chrome do importador pra você logar uma vez no Mercado Livre, na Shopee e na Amazon. Sem login, a busca em outras lojas costuma esbarrar em captcha e pula essas lojas.
+
+## Importar anúncios (linha de comando)
 
 ```bash
 brew install ollama && ollama serve &   # uma vez

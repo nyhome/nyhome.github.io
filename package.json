@@ -12,7 +12,9 @@
     "emulators": "firebase emulators:start --only firestore,auth --project demo-casa-ny",
     "seed": "node scripts/seed-emulator.mjs",
     "mailer": "node scripts/mailer.mjs",
-    "importar": "node scripts/importar.mjs"
+    "importar": "node scripts/importar.mjs",
+    "importador": "node scripts/importar.mjs --fila",
+    "importador:login": "node scripts/importar.mjs --login"
   },
   "dependencies": {
     "@astryxdesign/core": "^0.7.17",

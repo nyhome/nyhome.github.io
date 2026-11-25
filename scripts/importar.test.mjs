@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cleanPhotos, cleanTitle, nameFromModel, ldPrice, parsePrice, shortName, storeName, toDraft } from "./importar.mjs";
+import { cleanPhotos, cleanTitle, couponOf, modelCodes, nameFromModel, ldPrice, parsePrice, shortName, storeName, toDraft } from "./importar.mjs";
 
 test("storeName maps known stores and title-cases the rest", () => {
   assert.equal(storeName("https://www.amazon.com.br/dp/X"), "Amazon");
@@ -63,4 +63,18 @@ test("nameFromModel strips the brand and cuts at the first detail", () => {
   assert.equal(nameFromModel("Oster Cafeteira Oster com Jarra Inox 1,2L, OCAF650, 127V", "Oster"), "Cafeteira");
   assert.equal(nameFromModel("Jogo de Panelas Tramontina Paris 5 peças", "Tramontina"), "Jogo de Panelas");
   assert.equal(nameFromModel("Luminária Piso Arco Preta 160cm", ""), "Luminária Piso Arco");
+});
+
+test("couponOf keeps code-like coupons and drops prose", () => {
+  assert.equal(couponOf("casa10"), "CASA10");
+  assert.equal(couponOf("PRIMEIRA-COMPRA"), "PRIMEIRA-COMPRA");
+  assert.equal(couponOf(""), "");
+  assert.equal(couponOf("10% de desconto no Pix"), "");
+});
+
+test("modelCodes finds model codes, not sizes or voltages", () => {
+  assert.deepEqual(modelCodes("Oster Cafeteira com Jarra Inox 1,2L, OCAF650, 127V"), ["OCAF650"]);
+  assert.deepEqual(modelCodes("Philips Walita Série 5000 RI2240/91 1200W"), ["RI2240/91"]);
+  assert.deepEqual(modelCodes("Jogo de Panelas Tramontina Paris 5 peças"), []);
+  assert.deepEqual(modelCodes("Luminária 160cm 40W"), []);
 });
