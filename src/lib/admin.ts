@@ -3,7 +3,7 @@ import {
   GoogleAuthProvider, connectAuthEmulator, getAuth, onAuthStateChanged, signInWithPopup, signOut, type Auth, type User,
 } from "firebase/auth";
 import {
-  Timestamp, addDoc, collection, doc, getDocs, limit, orderBy, query, serverTimestamp, setDoc, updateDoc, writeBatch,
+  Timestamp, addDoc, collection, doc, getDocs, serverTimestamp, setDoc, updateDoc, writeBatch,
 } from "firebase/firestore/lite";
 import type { Delivery, Gift, GiftLink, RoomId } from "@/data/gifts";
 import { EMULATOR, app, db, toGift, type Reservation } from "./firebase";
@@ -106,31 +106,3 @@ export async function setTier(gift: Gift, res: Reservation | undefined, tier: st
 }
 
 export const saveDelivery = (d: Delivery) => setDoc(doc(db(), "settings", "delivery"), d);
-
-export interface ImportJob {
-  id: string;
-  url: string;
-  status: "queued" | "running" | "done" | "error";
-  name?: string;
-  error?: string;
-  createdAt: number;
-}
-
-/** First http(s) URL in a pasted or shared text ("Confira na Amazon: https://amzn.to/x" → the link). */
-export const findUrls = (text: string) => [...text.matchAll(/https?:\/\/[^\s<>"']+/g)].map((m) => m[0]);
-
-/** Queues links for the importer running on the Mac (npm run importador), which publishes them. */
-export async function enqueueImports(urls: string[], uid: string) {
-  const b = writeBatch(db());
-  for (const url of urls)
-    b.set(doc(collection(db(), "imports")), { url, status: "queued", by: uid, createdAt: serverTimestamp() });
-  await b.commit();
-}
-
-export async function fetchImports(): Promise<ImportJob[]> {
-  const snap = await getDocs(query(collection(db(), "imports"), orderBy("createdAt", "desc"), limit(20)));
-  return snap.docs.map((d) => {
-    const x = d.data();
-    return { id: d.id, url: x.url, status: x.status, name: x.name, error: x.error, createdAt: (x.createdAt as Timestamp | null)?.toMillis() ?? Date.now() };
-  });
-}

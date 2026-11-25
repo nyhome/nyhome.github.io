@@ -125,11 +125,6 @@ service cloud.firestore {
       );
     }
 
-    // Links waiting for the importer on the Mac (npm run importador). Admins only.
-    match /imports/{id} {
-      allow read, write: if isAdmin();
-    }
-
     match /settings/{doc} {
       allow read: if true;
       allow write: if isAdmin();

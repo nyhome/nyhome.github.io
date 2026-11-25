@@ -26,13 +26,14 @@ npm run test:rules   # regras de segurança no emulador
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8177 DRY_RUN=1 ADMIN_EMAILS=a@b.c npm run mailer   # e-mails sem enviar
 ```
 
-## Importar anúncios pelo painel ou pelo celular
+## API local para um app de IA
 
-1. No Mac, deixe rodando: `brew services start ollama` (uma vez) e `npm run importador`.
-2. Cole links na aba **Importar** do `/admin`, ou abra `https://nyhome.github.io/admin?importar=<link>`, que é o que o Atalho do iPhone faz.
-3. O importador lê a página, pega nome, modelo, preço, fotos e cupom, procura o mesmo modelo em outras lojas e **publica direto**. O painel mostra o status de cada link.
+`npm run api` sobe `http://127.0.0.1:4321`, que só aceita conexões do próprio Mac. Um app de IA local pode:
 
-`npm run importador:login` abre o Chrome do importador pra você logar uma vez no Mercado Livre, na Shopee e na Amazon. Sem login, a busca em outras lojas costuma esbarrar em captcha e pula essas lojas.
+- `GET /produtos/schema`: ler o formato do produto (JSON Schema);
+- `POST /produtos`: mandar um produto, ou uma lista, que é **publicado na hora**. Com `"status": "draft"` ele entra como rascunho pra revisar no painel.
+
+Se algum produto vier inválido, a resposta é 400 com o que corrigir e nada é gravado.
 
 ## Importar anúncios (linha de comando)
 
@@ -42,6 +43,8 @@ ollama pull qwen2.5:7b                  # ~4,7 GB
 npm run importar -- --dry <url>         # só mostra o que extraiu
 npm run importar -- <url> <url> ...     # salva como rascunho (precisa do service-account.json)
 ```
+
+O script também procura o mesmo código de modelo em outras lojas. `npm run importador:login` abre o Chrome do importador pra você logar uma vez no Mercado Livre, na Shopee e na Amazon; sem login, essas buscas costumam esbarrar em captcha e a loja fica de fora.
 
 O navegador abre de verdade. Se a loja pedir login ou captcha, resolva lá e aperte Enter no terminal; o perfil fica salvo em `.playwright-profile/`. Depois revise o rascunho em `/admin` e publique.
 

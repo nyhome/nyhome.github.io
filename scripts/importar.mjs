@@ -3,7 +3,6 @@
 //
 //   npm run importar -- <url> [<url> ...]          save drafts (needs service-account.json, or FIRESTORE_EMULATOR_HOST)
 //   npm run importar -- --dry <url>                 print what it would save
-//   npm run importador                              keep running: process links queued in /admin (Importar tab)
 // Env: OLLAMA_MODEL (default qwen2.5:7b), OLLAMA_URL (default http://localhost:11434).
 // The browser profile lives in .playwright-profile/, so a login or captcha you solve once is remembered.
 import { existsSync, readFileSync } from "node:fs";
@@ -101,7 +100,7 @@ async function otherStores(page, draft) {
     try {
       await page.goto(search(code), { waitUntil: "domcontentloaded", timeout: 20_000 });
       await page.waitForTimeout(2500);
-      // Captcha or "verify traffic" wall: skip this store instead of holding the queue (npm run importador:login helps).
+      // Captcha or "verify traffic" wall: skip this store (npm run importador:login helps).
       if (/captcha|verify|login|signin/i.test(page.url())) continue;
       const href = await page.evaluate(
         ({ code, pattern }) => {
@@ -240,7 +239,7 @@ export function toDraft(url, data, ai) {
   };
 }
 
-async function firestore() {
+export async function firestore() {
   const { initializeApp, cert } = await import("firebase-admin/app");
   const { getFirestore, FieldValue } = await import("firebase-admin/firestore");
   if (process.env.FIRESTORE_EMULATOR_HOST) initializeApp({ projectId: "demo-casa-ny" });
@@ -252,8 +251,7 @@ async function firestore() {
   return { db: getFirestore(), FieldValue };
 }
 
-// The CLI saves drafts to review; the queue (links sent from the phone) publishes straight away.
-const saveDraft = ({ db, FieldValue }, draft, status = "draft") =>
+export const saveDraft = ({ db, FieldValue }, draft, status = "draft") =>
   db.collection("gifts").add({
     ...draft, status, reservedAt: null, giverName: null, giverTier: null, byCouple: false, createdAt: FieldValue.serverTimestamp(),
   });
@@ -287,15 +285,6 @@ async function importOne(page, url, onBlocked) {
   return draft;
 }
 
-/** Queue mode: someone solving the captcha in the Mac's Chrome window, if anyone is around; gives up after 90s. */
-async function waitForHuman(page) {
-  console.log("  A loja pediu login ou captcha. Esperando até 90s alguém resolver na janela do Chrome...");
-  for (let i = 0; i < 30; i++) {
-    await page.waitForTimeout(3000);
-    if (hasProduct(await page.evaluate(collect))) return;
-  }
-}
-
 async function cli(urls, dry) {
   const fs = dry ? null : await firestore();
   const { ctx, page } = await openBrowser();
@@ -322,48 +311,6 @@ async function cli(urls, dry) {
   process.exitCode = ok === urls.length ? 0 : 1;
 }
 
-/** Watches imports/ (filled by the admin panel or /admin?importar=) and turns each queued link into a draft. */
-async function queue() {
-  const fs = await firestore();
-  const { db, FieldValue } = fs;
-  const { page } = await openBrowser();
-  // Anything left "running" by a previous crash goes back to the queue.
-  for (const d of (await db.collection("imports").where("status", "==", "running").get()).docs) await d.ref.update({ status: "queued" });
-
-  const pending = [];
-  let busy = false;
-  const work = async () => {
-    if (busy) return;
-    busy = true;
-    while (pending.length) {
-      const ref = pending.shift();
-      const snap = await ref.get();
-      if (snap.data()?.status !== "queued") continue;
-      const { url } = snap.data();
-      console.log(`\n→ ${url}`);
-      await ref.update({ status: "running", updatedAt: FieldValue.serverTimestamp() });
-      try {
-        const draft = await importOne(page, url, waitForHuman);
-        const gift = await saveDraft(fs, draft, "available");
-        await ref.update({ status: "done", giftId: gift.id, name: draft.name, updatedAt: FieldValue.serverTimestamp() });
-        console.log(`  Publicado: ${draft.name} (${draft.price ? `R$ ${draft.price}` : "sem preço"})`);
-      } catch (e) {
-        await ref.update({ status: "error", error: String(e.message).slice(0, 200), updatedAt: FieldValue.serverTimestamp() });
-        console.log(`  Falhou: ${e.message}`);
-      }
-    }
-    busy = false;
-  };
-  db.collection("imports").where("status", "==", "queued").onSnapshot(
-    (snap) => {
-      for (const ch of snap.docChanges()) if (ch.type === "added") pending.push(ch.doc.ref);
-      work();
-    },
-    (e) => console.error("Fila caiu:", e.message),
-  );
-  console.log(`Importador ligado (modelo ${MODEL}). Esperando links do painel... Ctrl+C para parar.`);
-}
-
 /** Opens the importer's Chrome on each store so you can log in once; logged-in sessions get far fewer captchas. */
 async function login() {
   const { ctx, page } = await openBrowser();
@@ -376,11 +323,10 @@ async function login() {
 
 async function main() {
   const args = process.argv.slice(2);
-  if (args.includes("--fila")) return queue();
   if (args.includes("--login")) return login();
   const urls = args.filter((a) => /^https?:\/\//.test(a));
   if (!urls.length) {
-    console.log("Uso: npm run importar -- [--dry] <url> [<url> ...]   ou   npm run importador");
+    console.log("Uso: npm run importar -- [--dry] <url> [<url> ...]");
     process.exit(1);
   }
   await cli(urls, args.includes("--dry"));

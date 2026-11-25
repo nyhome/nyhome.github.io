@@ -250,11 +250,3 @@ test("delivery settings: public read, admin write", async () => {
   await assertFails(setDoc(doc(guest(), "settings", "delivery"), { recipient: "x", address: "y" }));
   await assertSucceeds(setDoc(doc(admin(), "settings", "delivery"), { recipient: "x", address: "y" }));
 });
-
-// 18
-test("the import queue is admin-only", async () => {
-  await assertSucceeds(setDoc(doc(admin(), "imports", "i1"), { url: "https://a.co/x", status: "queued" }));
-  await assertSucceeds(getDocs(collection(admin(), "imports")));
-  await assertFails(setDoc(doc(guest(), "imports", "i2"), { url: "https://a.co/x", status: "queued" }));
-  await assertFails(getDocs(collection(guest(), "imports")));
-});
