@@ -38,6 +38,14 @@ test("rooms, tiers and the couple's own share", () => {
   assert.equal(s.couple, 200);
 });
 
+test("days start at local midnight", () => {
+  const now = new Date(2026, 10, 24, 15).getTime();
+  const early = new Date(2026, 10, 24, 0, 30).getTime();
+  const s = summarize(gifts, [{ giftId: "tv", name: "Ana", tier: "Tia", units: 1, at: early }], now);
+  assert.equal(s.daily[29], 1000);
+  assert.equal(new Date(s.start + 29 * DAY).getDate(), 24);
+});
+
 test("timeline starts from purchases before the window and accumulates by day", () => {
   const s = summarize(gifts, purchases, NOW, 30);
   assert.equal(s.timeline.length, 30);

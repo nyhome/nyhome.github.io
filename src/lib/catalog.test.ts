@@ -38,6 +38,12 @@ test("visibleGifts hides drafts, keeps sold-out gifts and puts them last", () =>
   assert.deepEqual(visibleGifts(gifts, "sala", "todos").map((g) => g.id), ["a", "b", "c"]);
 });
 
+test("visibleGifts sorts by price either way, sold-out still last", () => {
+  const shuffled = [gifts[4], gifts[2], gifts[0], gifts[1], gifts[3]];
+  assert.deepEqual(visibleGifts(shuffled, "todos", "todos", "menor").map((g) => g.id), ["a", "b", "e", "c", "d"]);
+  assert.deepEqual(visibleGifts(shuffled, "todos", "todos", "maior").map((g) => g.id), ["e", "b", "a", "d", "c"]);
+});
+
 test("price ranges include the lower bound and exclude the upper one", () => {
   assert.deepEqual(visibleGifts(gifts, "todos", "ate-150").map((g) => g.id), ["a"]);
   assert.deepEqual(visibleGifts(gifts, "todos", "150-500").map((g) => g.id), ["b", "e"]);

@@ -84,7 +84,7 @@ export function validateProduct(p) {
   const name = str(p.name, 60);
   if (!name) errors.push("name é obrigatório");
   if (!ROOMS.includes(p.room)) errors.push(`room precisa ser um de: ${ROOMS.join(", ")}`);
-  const price = typeof p.price === "string" ? Number(p.price.replace(",", ".")) : p.price;
+  const price = typeof p.price === "string" && p.price.trim() ? Number(p.price.replace(",", ".")) : p.price;
   if (typeof price !== "number" || !Number.isFinite(price) || price < 0) errors.push("price precisa ser um número >= 0");
   const links = Array.isArray(p.links) ? p.links.slice(0, 6) : [];
   if (!links.length) errors.push("links precisa ter pelo menos uma loja");
@@ -96,7 +96,7 @@ export function validateProduct(p) {
   // Accept "127", "220 v", "bivolt"...: an AI rarely writes it exactly like the enum.
   const voltage = p.voltage ? VOLTAGES.find((v) => v.toLowerCase() === String(p.voltage).toLowerCase().replace(/\s/g, "").replace(/^(127|220)$/, "$1v")) : "";
   if (voltage === undefined) errors.push(`voltage precisa ser um de: ${VOLTAGES.join(", ")}`);
-  const quantity = p.quantity === undefined ? 1 : Number(p.quantity);
+  const quantity = p.quantity === undefined ? 1 : typeof p.quantity === "number" || /^\d+$/.test(p.quantity) ? Number(p.quantity) : NaN;
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 50) errors.push("quantity precisa ser um inteiro de 1 a 50");
   if (p.status !== undefined && !["available", "draft"].includes(p.status)) errors.push("status precisa ser 'available' ou 'draft'");
   if (errors.length) return { errors };
@@ -129,6 +129,8 @@ export function mergeUpdate(current, patch) {
     return { errors: ["o presente tem reservas ativas; o status dele não muda por aqui"] };
   if (patch.status !== undefined && !["available", "draft"].includes(current.status))
     return { errors: [`o presente está "${current.status}"; o status dele não muda por aqui`] };
+  if (patch.status === "draft" && (current.boughtUnits ?? 0) > 0)
+    return { errors: ["convidados já deram unidades desse presente; ele não volta a ser rascunho"] };
   const { value, errors } = validateProduct({
     ...current,
     ...patch,
@@ -137,6 +139,12 @@ export function mergeUpdate(current, patch) {
   if (errors) return { errors };
   const update = {};
   for (const k of UPDATABLE) if (patch[k] !== undefined) update[k] = value[k];
+  // A published gift is "bought" exactly when every unit is: more units reopen it, fewer can close it.
+  const status = update.status ?? current.status;
+  if (update.quantity !== undefined && status !== "draft") {
+    const next = (current.boughtUnits ?? 0) >= update.quantity ? "bought" : "available";
+    if (next !== current.status) update.status = next;
+  }
   return { update };
 }
 
@@ -158,13 +166,18 @@ export async function listGifts({ db }) {
 /** Applies a checked refresh and stamps priceCheckedAt; returns { ok, update } or { errors }. */
 export async function updateGift({ db, FieldValue }, id, patch) {
   const ref = db.doc(`gifts/${id}`);
-  const snap = await ref.get();
-  if (!snap.exists) return { errors: [`presente ${id} não existe`] };
-  const { update, errors } = mergeUpdate(snap.data(), patch);
-  if (errors) return { errors };
-  await ref.update({ ...update, priceCheckedAt: FieldValue.serverTimestamp() });
-  console.log(`Atualizado: ${snap.data().name} ${JSON.stringify(update)}`);
-  return { ok: true, update };
+  // A transaction: a guest reserving between the read and the write would make the quantity check stale.
+  const result = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return { errors: [`presente ${id} não existe`] };
+    const { update, errors } = mergeUpdate(snap.data(), patch);
+    if (errors) return { errors };
+    tx.update(ref, { ...update, priceCheckedAt: FieldValue.serverTimestamp() });
+    return { ok: true, update, name: snap.data().name };
+  });
+  if (result.errors) return result;
+  console.log(`Atualizado: ${result.name} ${JSON.stringify(result.update)}`);
+  return { ok: true, update: result.update };
 }
 
 /**
@@ -193,23 +206,30 @@ export async function firestore() {
   return { db: getFirestore(), FieldValue };
 }
 
-/** Saves a product checked by validateProduct; returns the new gift id. */
+/** Saves a product checked by validateProduct; returns { id, status } of the gift it ended up in. */
 export async function saveProduct({ db, FieldValue }, { status, ...data }) {
   // The same model again means more units of it, never a copy (a copy per unit is what quantity replaced).
   if (data.model) {
     const same = (await db.collection("gifts").where("model", "==", data.model).limit(1).get()).docs[0];
     if (same) {
-      const quantity = (same.data().quantity ?? 1) + data.quantity;
-      await same.ref.update({ quantity, ...(same.data().status === "bought" ? { status: "available" } : {}) });
-      console.log(`Já existia: ${data.name} agora com ${quantity} unidades id=${same.id}`);
-      return same.id;
+      const merged = await db.runTransaction(async (tx) => {
+        const g = (await tx.get(same.ref)).data();
+        const quantity = (g.quantity ?? 1) + data.quantity;
+        if (quantity > 50) throw new Error(`${data.name} já tem ${g.quantity} unidades; com mais ${data.quantity} passaria de 50`);
+        // More units reopen a sold-out gift; a draft stays a draft (it still needs publishing).
+        const next = g.status === "bought" ? "available" : g.status;
+        tx.update(same.ref, { quantity, status: next });
+        return { quantity, status: next };
+      });
+      console.log(`Já existia: ${data.name} agora com ${merged.quantity} unidades (${merged.status}) id=${same.id}`);
+      return { id: same.id, status: merged.status };
     }
   }
   const ref = await db.collection("gifts").add({
     ...data, status, boughtUnits: 0, heldUnits: 0, holds: {}, givers: [], lastHold: "", createdAt: FieldValue.serverTimestamp(),
   });
   console.log(`${status === "draft" ? "Rascunho" : "Publicado"}: ${data.name} (R$ ${data.price}) id=${ref.id}`);
-  return ref.id;
+  return { id: ref.id, status };
 }
 
 const send = (res, code, body) => {
@@ -224,13 +244,19 @@ async function main() {
     if (!allowed(req, PORT)) return send(res, 403, { error: "requisição recusada" });
     const path = new URL(req.url, "http://x").pathname.replace(/\/$/, "");
     if (req.method === "GET" && path === "/produtos/schema") return send(res, 200, SCHEMA);
-    if (req.method === "GET" && path === "/produtos") return send(res, 200, { produtos: await listGifts(fs) });
+    if (req.method === "GET" && path === "/produtos")
+      return listGifts(fs).then(
+        (produtos) => send(res, 200, { produtos }),
+        (e) => send(res, 500, { error: `falha ao ler o Firestore: ${e.message}` }),
+      );
     if (req.method === "GET" && path === "")
       return send(res, 200, { ok: true, uso: "GET /produtos lista; POST /produtos cria; PATCH /produtos/<id> atualiza price/links/status. Formato em GET /produtos/schema." });
     const patchId = req.method === "PATCH" && path.match(/^\/produtos\/([A-Za-z0-9]{1,40})$/)?.[1];
     if (!patchId && (req.method !== "POST" || path !== "/produtos"))
       return send(res, 404, { error: "use GET /produtos, POST /produtos, PATCH /produtos/<id> ou GET /produtos/schema" });
 
+    // Decode as one stream, so an "ç" split across two chunks isn't mangled.
+    req.setEncoding("utf8");
     let raw = "";
     for await (const chunk of req) {
       raw += chunk;
@@ -254,7 +280,7 @@ async function main() {
 
     try {
       const criados = [];
-      for (const { value } of checked) criados.push({ id: await saveProduct(fs, value), name: value.name, status: value.status });
+      for (const { value } of checked) criados.push({ ...(await saveProduct(fs, value)), name: value.name });
       send(res, 201, { ok: true, criados });
     } catch (e) {
       console.error("Falha ao gravar:", e.message);

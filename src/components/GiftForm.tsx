@@ -7,7 +7,7 @@ import { Selector } from "@astryxdesign/core/Selector";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { ROOMS, VOLTAGES, type Gift, type GiftLink, type RoomId, type Voltage } from "@/data/gifts";
-import { saveGift } from "@/lib/admin";
+import { AdminError, saveGift } from "@/lib/admin";
 import { hide } from "@/lib/hooks";
 import styles from "./Admin.module.css";
 
@@ -45,8 +45,9 @@ function Form({ gift, onClose, onSaved }: { gift: Gift | null; onClose: () => vo
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // "1.299,90" (pt-BR) or "1299.90": a comma means pt-BR, so dots are thousands separators.
-    const value = Number(price.includes(",") ? price.replace(/\./g, "").replace(",", ".") : price);
+    // "1.299,90" / "1.299" (pt-BR) or "1299.90": a comma, or dots grouping thousands, mean pt-BR.
+    const p = price.trim();
+    const value = Number(p.includes(",") || /^\d{1,3}(\.\d{3})+$/.test(p) ? p.replace(/\./g, "").replace(",", ".") : p);
     const cleanLinks = links.filter((l) => l.url.trim()).map((l) => ({ store: l.store.trim() || "Loja", url: l.url.trim(), coupon: l.coupon?.trim() }));
     if (!name.trim() || !room || !price.trim() || !Number.isFinite(value) || value < 0) {
       setError("Preencha nome, cômodo e um preço válido.");
@@ -75,8 +76,8 @@ function Form({ gift, onClose, onSaved }: { gift: Gift | null; onClose: () => vo
       });
       onSaved();
       onClose();
-    } catch {
-      setError("Não deu para salvar. Tente de novo.");
+    } catch (err) {
+      setError(err instanceof AdminError ? err.message : "Não deu para salvar. Tente de novo.");
     } finally {
       setBusy(false);
     }

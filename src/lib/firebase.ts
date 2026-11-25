@@ -1,7 +1,7 @@
 import { getApp, getApps, initializeApp } from "firebase/app";
 import {
   Timestamp, collection, connectFirestoreEmulator, deleteField, doc, getDoc, getDocs, getFirestore, increment, query,
-  serverTimestamp, where, writeBatch, type DocumentData, type Firestore,
+  runTransaction, serverTimestamp, where, writeBatch, type DocumentData, type Firestore,
 } from "firebase/firestore/lite";
 import type { Delivery, Gift, Giver, Hold } from "@/data/gifts";
 
@@ -116,34 +116,34 @@ export async function fetchReservation(token: string): Promise<{ reservation: Re
   if (!snap.exists()) return null;
   const d = snap.data();
   const reservation: Reservation = { token, ...(d as Omit<Reservation, "token" | "reservedAt">), units: d.units ?? 1, reservedAt: ms(d.reservedAt) ?? 0 };
-  const g = await getDoc(doc(db(), "gifts", reservation.giftId)).catch(() => null);
-  return { reservation, gift: g?.exists() ? toGift(g.id, g.data()) : null };
+  const g = await getDoc(doc(db(), "gifts", reservation.giftId));
+  return { reservation, gift: g.exists() ? toGift(g.id, g.data()) : null };
 }
 
 /** Whether this reservation still holds its units (the mailer hasn't expired it). */
 export const holdsGift = (r: Reservation, g: Gift | null) => g !== null && r.holdId in g.holds;
 
-/** Confirm ("Já comprei") or give up ("Desistir"). Reads the gift first: the rules check the new givers list exactly. */
-export async function closeReservation(r: Reservation, outcome: "bought" | "released") {
-  const snap = await getDoc(doc(db(), "gifts", r.giftId));
-  if (!snap.exists()) throw new Error("presente não existe mais");
-  const g = toGift(snap.id, snap.data());
-  const hold = g.holds[r.holdId];
-  if (!hold) throw new Error("reserva expirada");
-  const b = writeBatch(db());
-  b.update(doc(db(), "reservations", r.token), { status: outcome, closedAt: serverTimestamp() });
-  const common = { [`holds.${r.holdId}`]: deleteField(), heldUnits: increment(-hold.units), lastHold: r.holdId };
-  const giver: Giver = { name: hold.giverName, tier: hold.giverTier, units: hold.units };
-  b.update(
-    doc(db(), "gifts", r.giftId),
-    outcome === "bought"
-      ? {
-          ...common,
-          boughtUnits: increment(hold.units),
-          givers: [...(snap.data().givers ?? []), giver],
-          ...(g.boughtUnits + hold.units >= g.quantity ? { status: "bought" } : {}),
-        }
-      : common,
-  );
-  await b.commit();
-}
+/** Confirm ("Já comprei") or give up ("Desistir"). A transaction: the rules check the new givers list exactly, so
+ * another guest confirming the same gift a moment earlier must not leave this write based on an old list. */
+export const closeReservation = (r: Reservation, outcome: "bought" | "released") =>
+  runTransaction(db(), async (b) => {
+    const snap = await b.get(doc(db(), "gifts", r.giftId));
+    if (!snap.exists()) throw new Error("presente não existe mais");
+    const g = toGift(snap.id, snap.data());
+    const hold = g.holds[r.holdId];
+    if (!hold) throw new Error("reserva expirada");
+    b.update(doc(db(), "reservations", r.token), { status: outcome, closedAt: serverTimestamp() });
+    const common = { [`holds.${r.holdId}`]: deleteField(), heldUnits: increment(-hold.units), lastHold: r.holdId };
+    const giver: Giver = { name: hold.giverName, tier: hold.giverTier, units: hold.units };
+    b.update(
+      doc(db(), "gifts", r.giftId),
+      outcome === "bought"
+        ? {
+            ...common,
+            boughtUnits: increment(hold.units),
+            givers: [...(snap.data().givers ?? []), giver],
+            ...(g.boughtUnits + hold.units >= g.quantity ? { status: "bought" } : {}),
+          }
+        : common,
+    );
+  });

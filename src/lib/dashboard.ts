@@ -44,7 +44,10 @@ export function summarize(allGifts: Gift[], purchases: PurchaseLike[], now: numb
     }
 
   // Cumulative guest purchases per day over the last `days` days (the couple's own purchases carry no date).
-  const start = Math.floor(now / DAY) * DAY - (days - 1) * DAY;
+  // Days start at local midnight, so a purchase at 9:00 in São Paulo lands on that day, not the one before.
+  const midnight = new Date(now);
+  midnight.setHours(0, 0, 0, 0);
+  const start = midnight.getTime() - (days - 1) * DAY;
   const daily = Array<number>(days).fill(0);
   let before = 0;
   for (const p of purchases) {

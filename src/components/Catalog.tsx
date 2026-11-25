@@ -3,7 +3,7 @@
 import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { Selector } from "@astryxdesign/core/Selector";
 import type { Gift, Room, RoomId } from "@/data/gifts";
-import { PRICE_RANGES, roomProgress, visibleGifts, type PriceRangeId } from "@/lib/catalog";
+import { PRICE_RANGES, SORTS, roomProgress, visibleGifts, type PriceRangeId, type SortId } from "@/lib/catalog";
 import { useIsNarrow } from "@/lib/hooks";
 import { GiftCard } from "./GiftCard";
 import { ProgressDots } from "./ProgressDots";
@@ -16,15 +16,17 @@ interface Props {
   onRetry: () => void;
   room: RoomId | "todos";
   price: PriceRangeId;
+  sort: SortId;
+  onSortChange: (sort: SortId) => void;
   onRoomChange: (room: RoomId | "todos") => void;
   onPriceChange: (price: PriceRangeId) => void;
   onOpen: (gift: Gift, trigger: HTMLElement) => void;
 }
 
 /** Level 2: the gifts, grouped by room, each card drawing itself in as it scrolls into view. */
-export function Catalog({ rooms, gifts, status, onRetry, room, price, onRoomChange, onPriceChange, onOpen }: Props) {
+export function Catalog({ rooms, gifts, status, onRetry, room, price, sort, onSortChange, onRoomChange, onPriceChange, onOpen }: Props) {
   const narrow = useIsNarrow();
-  const shown = visibleGifts(gifts, room, price);
+  const shown = visibleGifts(gifts, room, price, sort);
   const groups = rooms
     .filter((r) => room === "todos" || r.id === room)
     .map((r) => ({ room: r, gifts: shown.filter((g) => g.room === r.id) }))
@@ -70,6 +72,14 @@ export function Catalog({ rooms, gifts, status, onRetry, room, price, onRoomChan
             options={PRICE_RANGES.map((r) => ({ value: r.id, label: r.label }))}
             value={price}
             onChange={(v) => onPriceChange((v ?? "todos") as PriceRangeId)}
+          />
+          <Selector
+            label="Ordenar"
+            isLabelHidden
+            size="sm"
+            options={SORTS.map((s) => ({ value: s.id, label: s.label }))}
+            value={sort}
+            onChange={(v) => onSortChange((v ?? "menor") as SortId)}
           />
         </div>
       </div>

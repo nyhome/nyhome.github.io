@@ -28,8 +28,10 @@ test("e-mails escape guest-typed text and carry the personal link", () => {
     site: "https://nyhome.github.io",
   });
   assert.ok(mail.html.includes("https://nyhome.github.io/reserva?t=abc"));
-  assert.ok(mail.html.includes("&lt;b&gt;Maria&lt;/b&gt;"));
+  assert.ok(mail.html.includes("Obrigado, bMariab!"));
   assert.ok(!mail.html.includes("<b>Maria</b>"));
+  const link = compose("welcome", { res: { token: "t", name: "https://evil.example/x", reservedAt: NOW, email: "m@x.com", tier: "Prima" }, gift: null, delivery: null, site: "https://nyhome.github.io" });
+  assert.ok(!link.html.includes("evil.example") && !link.html.includes("https://evil"));
   assert.ok(mail.html.includes("OFF10") && mail.html.includes("Nathália"));
   assert.equal(esc(`"&'`), "&quot;&amp;&#39;");
 });

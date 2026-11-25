@@ -11,7 +11,7 @@ import { TextArea } from "@astryxdesign/core/TextArea";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { ROOMS, TIERS, type Delivery, type Gift } from "@/data/gifts";
 import {
-  boughtByUs, deleteGift, fetchAll, logOut, markBought, publish, releaseHold, saveDelivery, setTier, signIn, undoPurchases,
+  AdminError, boughtByUs, deleteGift, fetchAll, logOut, markBought, publish, releaseHold, saveDelivery, setTier, signIn, undoPurchases,
   watchUser, type AdminData,
 } from "@/lib/admin";
 import { formatBRL, holdEndsAt, unitsLeft } from "@/lib/catalog";
@@ -82,7 +82,8 @@ function Panel({ user }: { user: User }) {
 
 function Gifts() {
   const [data, setData] = useState<AdminData | null>(null);
-  const [failed, setFailed] = useState(false);
+  // true = the list didn't load; a string = what went wrong with the last action.
+  const [failed, setFailed] = useState<boolean | string>(false);
   const [filter, setFilter] = useState<Filter>("todos");
   const [editing, setEditing] = useState<Gift | "new" | null>(null);
   const [deleting, setDeleting] = useState<Gift | null>(null);
@@ -96,7 +97,6 @@ function Gifts() {
         .then((d) => {
           setData(d);
           setNow(Date.now());
-          setFailed(false);
         })
         .catch(() => setFailed(true)),
     [],
@@ -107,17 +107,18 @@ function Gifts() {
 
   const run = async (id: string, fn: () => Promise<unknown>) => {
     setBusy(id);
+    setFailed(false);
     try {
       await fn();
-    } catch {
-      setFailed(true);
+    } catch (err) {
+      setFailed(err instanceof AdminError ? err.message : "Uma ação falhou. A lista foi recarregada; tente de novo.");
     } finally {
       await load();
       setBusy(null);
     }
   };
 
-  if (!data) return <p>{failed ? "Não deu para carregar. Recarregue a página." : "Carregando presentes…"}</p>;
+  if (!data) return <p>{failed === true ? "Não deu para carregar. Recarregue a página." : "Carregando presentes…"}</p>;
 
   const shown = data.gifts.filter((g) => filter === "todos" || FILTERS[filter](g));
   const count = (f: Exclude<Filter, "todos">) => data.gifts.filter(FILTERS[f]).length;
@@ -134,7 +135,7 @@ function Gifts() {
         </SegmentedControl>
         <Button label="Adicionar presente" variant="primary" onClick={() => setEditing("new")} />
       </div>
-      {failed && <p className={styles.error} role="alert">Uma ação falhou. A lista foi recarregada; tente de novo.</p>}
+      {typeof failed === "string" && <p className={styles.error} role="alert">{failed}</p>}
 
       {ROOMS.map((room) => {
         const list = shown.filter((g) => g.room === room.id);

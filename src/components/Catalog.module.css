@@ -44,7 +44,12 @@
 }
 
 .price {
-  min-width: 190px;
+  display: flex;
+  gap: 8px;
+}
+
+.price > * {
+  min-width: 170px;
 }
 
 .group {
@@ -109,6 +114,10 @@
   .rooms,
   .price {
     flex: 1 1 100%;
+    min-width: 0;
+  }
+  .price > * {
+    flex: 1;
     min-width: 0;
   }
   .group {

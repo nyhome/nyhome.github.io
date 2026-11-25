@@ -55,7 +55,9 @@ function Content({ gift, delivery, onClose, onChanged }: Omit<Props, "gift"> & {
   const formRef = useRef<HTMLFormElement>(null);
   const soldOut = isSoldOut(gift);
   const left = unitsLeft(gift);
-  const [units, setUnits] = useState(1);
+  const [picked, setPicked] = useState(1);
+  // After the list refreshes, fewer units may be left than the guest had picked.
+  const units = Math.min(picked, Math.max(1, left));
   const giver = giverLabel(gift);
 
   // The reserve button that had focus is gone; put the guest straight into the name field.
@@ -76,11 +78,11 @@ function Content({ gift, delivery, onClose, onChanged }: Omit<Props, "gift"> & {
 
     setBusy(true);
     try {
-      const token = await reserveGift(gift.id, { name: guest, email, tier: tier!, units: Math.min(units, left) });
+      const token = await reserveGift(gift.id, { name: guest, email, tier: tier!, units });
       setStep({
         kind: "done",
         guest,
-        units: Math.min(units, left),
+        units,
         until: new Date(Date.now() + HOLD_HOURS * 3600_000),
         link: `${window.location.origin}/reserva?t=${token}`,
       });
@@ -93,7 +95,8 @@ function Content({ gift, delivery, onClose, onChanged }: Omit<Props, "gift"> & {
             ? "Outro convidado acabou de reservar unidades deste presente. A lista foi atualizada; confira quantas faltam."
             : "Alguém acabou de reservar este presente. A lista foi atualizada."
           : "Não conseguimos reservar agora. Confira sua conexão e tente de novo.",
-        race: denied ? "1" : undefined,
+        // Remembers how many were left when refused; once the refreshed gift shows a new count, the guest can retry.
+        race: denied ? String(left) : undefined,
       });
     } finally {
       setBusy(false);
@@ -177,7 +180,7 @@ function Content({ gift, delivery, onClose, onChanged }: Omit<Props, "gift"> & {
                   label: `${i + 1} ${i === 0 ? "unidade" : "unidades"} · ${formatBRL(gift.price * (i + 1))}`,
                 }))}
                 value={String(units)}
-                onChange={(v) => setUnits(Number(v))}
+                onChange={(v) => setPicked(Number(v))}
               />
             )}
             <TextInput
@@ -224,7 +227,7 @@ function Content({ gift, delivery, onClose, onChanged }: Omit<Props, "gift"> & {
             </p>
             {errors.form && <p className={styles.reserved} role="alert">{errors.form}</p>}
             <div className={styles.actions}>
-              <Button label="Confirmar reserva" variant="primary" size="lg" type="submit" isLoading={busy} isDisabled={!!errors.race} />
+              <Button label="Confirmar reserva" variant="primary" size="lg" type="submit" isLoading={busy} isDisabled={errors.race === String(left)} />
               <Button label="Voltar aos detalhes" variant="ghost" size="lg" onClick={() => setStep({ kind: "details" })} />
             </div>
           </form>

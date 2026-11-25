@@ -10,6 +10,13 @@ export const PRICE_RANGES = [
 
 export type PriceRangeId = (typeof PRICE_RANGES)[number]["id"];
 
+export const SORTS = [
+  { id: "menor", label: "Menor preço" },
+  { id: "maior", label: "Maior preço" },
+] as const;
+
+export type SortId = (typeof SORTS)[number]["id"];
+
 /** Which of `n` equal slices of a 0..1 scroll progress is active. */
 export function activeIndex(progress: number, n: number): number {
   if (n <= 0) return 0;
@@ -28,8 +35,8 @@ export const unitsLeft = (g: Gift) => Math.max(0, g.quantity - g.boughtUnits - g
 
 export const isSoldOut = (g: Gift) => g.status === "bought" || unitsLeft(g) === 0;
 
-/** Gifts a guest can see, sold-out ones last within each room. Ranges include the lower bound only. */
-export function visibleGifts(gifts: Gift[], room: RoomId | "todos", price: PriceRangeId): Gift[] {
+/** Gifts a guest can see, by price, sold-out ones last within each room. Ranges include the lower bound only. */
+export function visibleGifts(gifts: Gift[], room: RoomId | "todos", price: PriceRangeId, sort: SortId = "menor"): Gift[] {
   const range = PRICE_RANGES.find((r) => r.id === price) ?? PRICE_RANGES[0];
   return gifts
     .filter(
@@ -39,7 +46,7 @@ export function visibleGifts(gifts: Gift[], room: RoomId | "todos", price: Price
         g.price >= range.min &&
         (range.max === Infinity ? true : g.price < range.max),
     )
-    .sort((a, b) => Number(isSoldOut(a)) - Number(isSoldOut(b)));
+    .sort((a, b) => Number(isSoldOut(a)) - Number(isSoldOut(b)) || (sort === "menor" ? a.price - b.price : b.price - a.price));
 }
 
 /** "3 de 8 presentes escolhidos", counted in units: 3 sheet sets are 3 gifts. The couple's own count too. */

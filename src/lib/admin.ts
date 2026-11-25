@@ -1,9 +1,11 @@
-// Admin-only reads and writes. firestore.rules lets admins (by UID) write anything, so these are plain batches.
+// Admin-only reads and writes. firestore.rules lets admins (by UID) write anything, so nothing checks these but
+// this file: every action re-reads the gift inside a transaction, so a panel loaded minutes ago can't double-count.
 import {
   GoogleAuthProvider, connectAuthEmulator, getAuth, onAuthStateChanged, signInWithPopup, signOut, type Auth, type User,
 } from "firebase/auth";
 import {
-  Timestamp, addDoc, collection, deleteField, doc, getDocs, increment, serverTimestamp, setDoc, updateDoc, writeBatch,
+  Timestamp, addDoc, collection, deleteField, doc, getDocs, query, runTransaction, serverTimestamp, setDoc, updateDoc, where,
+  writeBatch, type Transaction,
 } from "firebase/firestore/lite";
 import type { Delivery, Gift, GiftLink, Giver, RoomId, Voltage } from "@/data/gifts";
 import { unitsLeft } from "./catalog";
@@ -75,66 +77,98 @@ export interface GiftInput {
   quantity: number;
 }
 
+/** Thrown with a message the panel can show as is. */
+export class AdminError extends Error {}
+
+/** The current gift, read inside the transaction. */
+async function current(tx: Transaction, id: string): Promise<Gift> {
+  const snap = await tx.get(doc(db(), "gifts", id));
+  if (!snap.exists()) throw new AdminError("Esse presente não existe mais.");
+  return toGift(snap.id, snap.data());
+}
+
+/** A published gift is "bought" exactly when every unit is. */
+const statusFor = (g: Gift, boughtUnits: number, quantity = g.quantity) =>
+  g.status === "draft" ? "draft" : boughtUnits >= quantity ? "bought" : "available";
+
 export async function saveGift(id: string | null, input: GiftInput) {
   // Firestore rejects undefined: drop the optional coupon when empty.
   const links = input.links.map(({ store, url, coupon }) => (coupon ? { store, url, coupon } : { store, url }));
   const data = { ...input, links };
-  if (id) return updateDoc(doc(db(), "gifts", id), data);
+  if (id)
+    return runTransaction(db(), async (tx) => {
+      const g = await current(tx, id);
+      const taken = g.boughtUnits + g.heldUnits;
+      // Units already held or bought can't disappear from under the guests who took them.
+      if (input.quantity < taken) throw new AdminError(`Já tem ${taken} unidade(s) reservada(s) ou comprada(s); a quantidade não pode ser menor.`);
+      tx.update(doc(db(), "gifts", id), { ...data, status: statusFor(g, g.boughtUnits, input.quantity) });
+    });
   await addDoc(collection(db(), "gifts"), {
     ...data, status: "draft", boughtUnits: 0, heldUnits: 0, holds: {}, givers: [], lastHold: "", createdAt: serverTimestamp(),
   });
 }
 
-export async function deleteGift(id: string) {
-  await writeBatch(db()).delete(doc(db(), "gifts", id)).commit();
-}
+/** Refused while guests hold units: their reservations would point at nothing and keep getting e-mails. */
+export const deleteGift = (id: string) =>
+  runTransaction(db(), async (tx) => {
+    const g = await current(tx, id);
+    if (g.heldUnits > 0) throw new AdminError("Tem convidado com reserva ativa nesse presente. Libere as reservas antes de excluir.");
+    tx.delete(doc(db(), "gifts", id));
+  });
 
 export const publish = (id: string) => updateDoc(doc(db(), "gifts", id), { status: "available" });
 
-/** Drops a hold from the gift, in the same batch as the reservation update. */
-function dropHold(b: ReturnType<typeof writeBatch>, gift: Gift, res: Reservation) {
-  b.update(doc(db(), "gifts", gift.id), { [`holds.${res.holdId}`]: deleteField(), heldUnits: increment(-(gift.holds[res.holdId]?.units ?? res.units)) });
-  b.delete(doc(db(), "holdLocks", res.holdId));
-}
-
-/** A guest's reservation becomes a purchase (the guest forgot to click "Já comprei"). */
-export async function markBought(gift: Gift, res: Reservation) {
-  const hold = gift.holds[res.holdId];
-  const units = hold?.units ?? res.units;
-  const giver: Giver = { name: hold?.giverName ?? res.name.split(" ")[0], tier: hold?.giverTier ?? res.tier, units };
-  const b = writeBatch(db());
-  dropHold(b, gift, res);
-  b.update(doc(db(), "gifts", gift.id), {
-    boughtUnits: increment(units),
-    givers: [...gift.givers, giver],
-    ...(gift.boughtUnits + units >= gift.quantity ? { status: "bought" } : {}),
+/** Closes a guest's hold as a purchase (they forgot "Já comprei") or frees it, if it is still open. */
+const closeHold = (res: Reservation, outcome: "bought" | "released") =>
+  runTransaction(db(), async (tx) => {
+    const r = await tx.get(doc(db(), "reservations", res.token));
+    const g = await current(tx, res.giftId);
+    const hold = g.holds[res.holdId];
+    if (r.data()?.status !== "reserved" || !hold) throw new AdminError("Essa reserva já foi fechada (pelo convidado ou porque expirou).");
+    const boughtUnits = g.boughtUnits + (outcome === "bought" ? hold.units : 0);
+    tx.update(doc(db(), "gifts", g.id), {
+      [`holds.${res.holdId}`]: deleteField(),
+      heldUnits: g.heldUnits - hold.units,
+      ...(outcome === "bought"
+        ? {
+            boughtUnits,
+            givers: [...g.givers, { name: hold.giverName, tier: hold.giverTier, units: hold.units } satisfies Giver],
+            status: statusFor(g, boughtUnits),
+          }
+        : {}),
+    });
+    tx.delete(doc(db(), "holdLocks", res.holdId));
+    tx.update(doc(db(), "reservations", res.token), {
+      status: outcome, closedAt: serverTimestamp(), ...(outcome === "bought" ? { adminNotified: true } : {}),
+    });
   });
-  b.update(doc(db(), "reservations", res.token), { status: "bought", adminNotified: true, closedAt: serverTimestamp() });
-  await b.commit();
-}
 
-/** Frees a guest's units (they gave up, or the hold should go). */
-export async function releaseHold(gift: Gift, res: Reservation) {
-  const b = writeBatch(db());
-  dropHold(b, gift, res);
-  b.update(doc(db(), "reservations", res.token), { status: "released", closedAt: serverTimestamp() });
-  await b.commit();
-}
+export const markBought = (_gift: Gift, res: Reservation) => closeHold(res, "bought");
+export const releaseHold = (_gift: Gift, res: Reservation) => closeHold(res, "released");
 
 /** The couple bought the units still open; guests' holds stay as they are. */
-export async function boughtByUs(gift: Gift) {
-  const units = unitsLeft(gift);
-  if (!units) return;
-  await updateDoc(doc(db(), "gifts", gift.id), {
-    boughtUnits: increment(units),
-    givers: [...gift.givers, { name: "", tier: "", units, byCouple: true } satisfies Giver],
-    ...(gift.boughtUnits + units >= gift.quantity ? { status: "bought" } : {}),
+export const boughtByUs = (gift: Gift) =>
+  runTransaction(db(), async (tx) => {
+    const g = await current(tx, gift.id);
+    const units = unitsLeft(g);
+    if (!units) return;
+    const boughtUnits = g.boughtUnits + units;
+    tx.update(doc(db(), "gifts", g.id), {
+      boughtUnits,
+      givers: [...g.givers, { name: "", tier: "", units, byCouple: true } satisfies Giver],
+      status: statusFor(g, boughtUnits),
+    });
   });
-}
 
-/** Undoes every purchase recorded on the gift (marked by mistake); holds stay. */
-export const undoPurchases = (gift: Gift) =>
-  updateDoc(doc(db(), "gifts", gift.id), { boughtUnits: 0, givers: [], status: "available" });
+/** Undoes every purchase recorded on the gift (marked by mistake); holds stay. The guests' confirmed reservations
+ * go back to "released" so the dashboard history matches. */
+export async function undoPurchases(gift: Gift) {
+  const bought = await getDocs(query(collection(db(), "reservations"), where("giftId", "==", gift.id), where("status", "==", "bought")));
+  const b = writeBatch(db());
+  b.update(doc(db(), "gifts", gift.id), { boughtUnits: 0, givers: [], status: gift.status === "draft" ? "draft" : "available" });
+  for (const d of bought.docs) b.update(d.ref, { status: "released" });
+  await b.commit();
+}
 
 export async function setTier(gift: Gift, res: Reservation, tier: string) {
   const b = writeBatch(db());

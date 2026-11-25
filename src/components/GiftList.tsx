@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { Delivery, Gift, Room, RoomId } from "@/data/gifts";
-import type { PriceRangeId } from "@/lib/catalog";
+import type { PriceRangeId, SortId } from "@/lib/catalog";
 import { fetchDelivery, fetchGifts } from "@/lib/firebase";
 import { Catalog } from "./Catalog";
 import { GiftDialog } from "./GiftDialog";
@@ -16,6 +16,7 @@ export function GiftList({ rooms }: { rooms: Room[] }) {
   const [failed, setFailed] = useState(false);
   const [room, setRoom] = useState<RoomId | "todos">("todos");
   const [price, setPrice] = useState<PriceRangeId>("todos");
+  const [sort, setSort] = useState<SortId>("menor");
   const [openId, setOpenId] = useState<string | null>(null);
   const trigger = useRef<HTMLElement | null>(null);
 
@@ -66,6 +67,8 @@ export function GiftList({ rooms }: { rooms: Room[] }) {
         onRetry={load}
         room={room}
         price={price}
+        sort={sort}
+        onSortChange={setSort}
         onRoomChange={setRoom}
         onPriceChange={setPrice}
         onOpen={(g, el) => {

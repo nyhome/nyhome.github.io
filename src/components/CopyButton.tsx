@@ -13,15 +13,15 @@ export function CopyButton({
   size?: "sm" | "md" | "lg";
   variant?: "primary" | "secondary" | "ghost";
 }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<boolean | "failed">(false);
   return (
     <Button
-      label={copied ? copiedLabel : label}
+      label={copied === "failed" ? "Não deu, copie à mão" : copied ? copiedLabel : label}
       variant={variant}
       size={size}
       onClick={async () => {
-        await navigator.clipboard.writeText(text);
-        setCopied(true);
+        // Some in-app browsers refuse the clipboard; the text is on screen, so say so instead of failing silently.
+        setCopied(await navigator.clipboard.writeText(text).then(() => true, () => "failed" as const));
         setTimeout(() => setCopied(false), 2000);
       }}
     />

@@ -29,7 +29,8 @@ const when = (ms) =>
     timeZone: "America/Sao_Paulo", weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
   });
 
-const first = (name) => String(name).trim().split(/\s+/)[0];
+// Letters only: anyone can type a "name" like https://evil.example and have the couple's Gmail send it as a link.
+const first = (name) => String(name).trim().split(/\s+/)[0].replace(/[^\p{L}'-]/gu, "").slice(0, 30) || "convidado";
 
 function layout(body) {
   return `<div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;padding:24px;color:#36402a;background:#f5f1e5;line-height:1.5">
@@ -112,7 +113,7 @@ async function main() {
   );
   const db = getFirestore();
   const dry = process.env.DRY_RUN === "1";
-  const site = (process.env.SITE_URL ?? "https://nyhome.github.io").replace(/\/$/, "");
+  const site = (process.env.SITE_URL || "https://nyhome.github.io").replace(/\/$/, "");
   const admins = (process.env.ADMIN_EMAILS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 
   let transport = null;
@@ -150,17 +151,22 @@ async function main() {
     try {
       const gift = await giftOf(res.giftId);
       if (kind === "expire") {
+        // Stop before expiring: an expired reservation is never queried again, so its notice must fit this run.
+        if (sent >= MAX_PER_RUN) break;
         // Frees this reservation's units on the gift (its hold), if the hold is still there.
-        await db.runTransaction(async (tx) => {
+        const expired = await db.runTransaction(async (tx) => {
           const g = await tx.get(db.doc(`gifts/${res.giftId}`));
           const r = await tx.get(snap.ref);
-          if (r.data().status !== "reserved") return;
+          // The guest confirmed or gave up (or an admin closed it) since the query: nothing expired, no e-mail.
+          if (r.data().status !== "reserved") return false;
           const hold = g.exists ? g.data().holds?.[res.holdId] : null;
           if (hold)
             tx.update(g.ref, { [`holds.${res.holdId}`]: FieldValue.delete(), heldUnits: FieldValue.increment(-hold.units) });
           tx.delete(db.doc(`holdLocks/${res.holdId}`));
           tx.update(snap.ref, { status: "expired", closedAt: FieldValue.serverTimestamp() });
+          return true;
         });
+        if (!expired) continue;
         // shortcut: e-mailed after the commit, so a crash right here loses this one notice; fine for a courtesy note
         await send(res.email, compose("expired", { res, gift, delivery, site }));
         await snap.ref.update({ "mailed.expired": true });

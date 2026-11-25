@@ -54,8 +54,11 @@ export function Dashboard() {
       <section className={`${styles.card} ${styles.hero}`} aria-labelledby="d-hero">
         <div>
           <div className={styles.heroLabel} id="d-hero">Já ganhamos</div>
-          <div className={styles.heroValue}>{formatBRL(s.bought)}</div>
-          <div className={styles.heroOf}>de {formatBRL(s.total)} da lista · {pct(s.bought, s.total)}% comprado</div>
+          <div className={styles.heroValue}>{formatBRL(s.bought - s.couple)}</div>
+          <div className={styles.heroOf}>
+            de {formatBRL(s.total)} da lista · {pct(s.bought, s.total)}% comprado
+            {s.couple > 0 && `, contando ${formatBRL(s.couple)} que nós compramos`}
+          </div>
         </div>
         <div>
           <div className={styles.seg} role="img" aria-label={parts.map((p) => `${p.name} ${formatBRL(p.value)}`).join(", ")}>

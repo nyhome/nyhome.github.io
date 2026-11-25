@@ -8,6 +8,7 @@ import { SCHEMA, firestore, listGifts, saveProduct, updateGift, validateProduct 
 const [cmd, id] = process.argv.slice(2);
 const stdin = async () => {
   let raw = "";
+  process.stdin.setEncoding("utf8");
   for await (const chunk of process.stdin) raw += chunk;
   return JSON.parse(raw);
 };
