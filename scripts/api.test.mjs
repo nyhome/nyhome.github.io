@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { allowed, normalizePhotos, validateProduct } from "./api.mjs";
+import { allowed, mergeUpdate, normalizePhotos, validateProduct } from "./api.mjs";
 
 const ok = {
   name: "Cafeteira", model: "Oster OCAF650 127V", room: "cozinha", price: 130.05,
@@ -79,4 +79,15 @@ test("voltage is optional and normalized from how an AI tends to write it", () =
   assert.equal(validateProduct({ ...ok, voltage: "220 v" }).value.voltage, "220V");
   assert.equal(validateProduct({ ...ok, voltage: "bivolt" }).value.voltage, "Bivolt");
   assert.ok(validateProduct({ ...ok, voltage: "110V" }).errors);
+});
+
+test("mergeUpdate changes only price/links/status, normalized, and never a held gift's status", () => {
+  const current = { ...ok, status: "available", voltage: "127V", byCouple: false };
+  const { update } = mergeUpdate(current, { price: "119,90", links: [{ store: "Amazon", url: "https://amzn.to/novo", coupon: "off5" }] });
+  assert.deepEqual(update, { price: 119.9, links: [{ store: "Amazon", url: "https://amzn.to/novo", coupon: "OFF5" }] });
+  assert.deepEqual(mergeUpdate(current, { status: "draft" }).update, { status: "draft" });
+  assert.ok(mergeUpdate(current, { name: "Outro" }).errors[0].includes("recusado: name"));
+  assert.ok(mergeUpdate(current, { links: [] }).errors);
+  assert.ok(mergeUpdate({ ...current, status: "reserved" }, { status: "draft" }).errors);
+  assert.deepEqual(mergeUpdate({ ...current, status: "bought" }, { price: 99 }).update, { price: 99 });
 });

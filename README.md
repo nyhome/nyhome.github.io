@@ -6,6 +6,7 @@ Site estático (Next.js `output: "export"`) publicado no GitHub Pages em `nyhome
 - `/reserva?t=…`: o link pessoal do convidado, com os botões **Já comprei** e **Desistir**.
 - `/admin`: o painel dos noivos (login com Google). Dá pra adicionar, editar, publicar, marcar comprado, "comprado por nós", liberar reserva, corrigir parentesco e editar o endereço de entrega.
 - `scripts/mailer.mjs`: roda a cada 15 min no GitHub Actions ([`mailer.yml`](.github/workflows/mailer.yml)). Manda o e-mail de reserva, o lembrete de 48h, o aviso de expiração em 72h (e devolve o presente pra lista) e o aviso de compra para os noivos, tudo pelo Gmail.
+- **Atualizar preços e links:** a skill `/atualizar-presentes` (em `~/.claude/skills/atualizar-presentes`) confere cada loja no Chrome logado e grava com `node scripts/produto.mjs atualizar <id>`.
 - **Adicionar produtos:** a skill `/presente` do Claude Code (em `~/.claude/skills/presente`) abre os links no seu Chrome logado (`claude --chrome`), monta o produto com link de afiliado e outras lojas, e grava com `scripts/produto.mjs`.
 
 ## Desenvolvimento local
@@ -32,6 +33,8 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8177 DRY_RUN=1 ADMIN_EMAILS=a@b.c npm run mail
 
 - `GET /produtos/schema`: ler o formato do produto (JSON Schema);
 - `POST /produtos`: mandar um produto, ou uma lista, que é **publicado na hora**. Com `"status": "draft"` ele entra como rascunho pra revisar no painel.
+
+`GET /produtos` lista todos os presentes (com `priceCheckedAt`, a conferência mais antiga primeiro) e `PATCH /produtos/<id>` atualiza só `price`, `links` e `status`; o status de presente reservado ou comprado não muda por aí.
 
 Se algum produto vier inválido, a resposta é 400 com o que corrigir e nada é gravado. A mesma validação vale para `node scripts/produto.mjs < produto.json`, que é o que a skill `/presente` usa (formato: `node scripts/produto.mjs --schema`).
 

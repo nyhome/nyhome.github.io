@@ -3,7 +3,9 @@
 //
 //   npm run api                         → http://127.0.0.1:4321
 //   GET  /produtos/schema               → JSON schema of a product (hand it to the AI app)
+//   GET  /produtos                      → every gift (id, status, price, links, priceCheckedAt), oldest check first
 //   POST /produtos                      → one product or an array; published unless "status": "draft"
+//   PATCH /produtos/<id>                → refresh price/links/status of one gift (the /atualizar-presentes skill)
 //
 // curl -X POST http://127.0.0.1:4321/produtos -H 'content-type: application/json' \
 //   -d '{"name":"Cafeteira","model":"Oster OCAF650 127V","room":"cozinha","price":130,
@@ -107,6 +109,55 @@ export function validateProduct(p) {
   };
 }
 
+const UPDATABLE = ["price", "links", "status"];
+
+/**
+ * Checks a price/links refresh against the gift as it is now; returns { update } (only the changed keys, normalized)
+ * or { errors }. Reserved or bought gifts can't change status, and nothing else is touched. Pure: tested in api.test.mjs.
+ */
+export function mergeUpdate(current, patch) {
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) return { errors: ["a atualização precisa ser um objeto JSON"] };
+  const extra = Object.keys(patch).filter((k) => !UPDATABLE.includes(k));
+  if (extra.length) return { errors: [`só dá para atualizar ${UPDATABLE.join(", ")}; recusado: ${extra.join(", ")}`] };
+  if (patch.status !== undefined && !["available", "draft"].includes(current.status))
+    return { errors: [`o presente está "${current.status}"; o status dele não muda por aqui`] };
+  const { value, errors } = validateProduct({
+    ...current,
+    ...patch,
+    status: patch.status ?? (current.status === "draft" ? "draft" : "available"),
+  });
+  if (errors) return { errors };
+  const update = {};
+  for (const k of UPDATABLE) if (patch[k] !== undefined) update[k] = value[k];
+  return { update };
+}
+
+/** Every gift with what a refresh needs, oldest price check first. */
+export async function listGifts({ db }) {
+  const snap = await db.collection("gifts").get();
+  return snap.docs
+    .map((d) => {
+      const g = d.data();
+      return {
+        id: d.id, status: g.status, name: g.name, model: g.model, voltage: g.voltage ?? null, room: g.room, price: g.price,
+        links: g.links ?? [], priceCheckedAt: g.priceCheckedAt?.toDate().toISOString() ?? null,
+      };
+    })
+    .sort((a, b) => (a.priceCheckedAt ?? "").localeCompare(b.priceCheckedAt ?? ""));
+}
+
+/** Applies a checked refresh and stamps priceCheckedAt; returns { ok, update } or { errors }. */
+export async function updateGift({ db, FieldValue }, id, patch) {
+  const ref = db.doc(`gifts/${id}`);
+  const snap = await ref.get();
+  if (!snap.exists) return { errors: [`presente ${id} não existe`] };
+  const { update, errors } = mergeUpdate(snap.data(), patch);
+  if (errors) return { errors };
+  await ref.update({ ...update, priceCheckedAt: FieldValue.serverTimestamp() });
+  console.log(`Atualizado: ${snap.data().name} ${JSON.stringify(update)}`);
+  return { ok: true, update };
+}
+
 /**
  * Only non-browser clients (curl, the /presente skill, a local AI app) may write. Checking Host stops DNS rebinding;
  * refusing browser Origins and requiring a JSON content type (which forces a preflight we never approve) stops
@@ -117,7 +168,7 @@ export function allowed({ method, headers }, port) {
   const hosts = [`127.0.0.1:${port}`, `localhost:${port}`];
   if (!hosts.includes(headers.host)) return false;
   if (headers.origin && !hosts.some((h) => headers.origin === `http://${h}`)) return false;
-  return method !== "POST" || /^application\/json\b/i.test(headers["content-type"] ?? "");
+  return !["POST", "PATCH"].includes(method) || /^application\/json\b/i.test(headers["content-type"] ?? "");
 }
 
 /** Admin SDK: the emulator when FIRESTORE_EMULATOR_HOST is set, otherwise production via service-account.json. */
@@ -154,9 +205,12 @@ async function main() {
     if (!allowed(req, PORT)) return send(res, 403, { error: "requisição recusada" });
     const path = new URL(req.url, "http://x").pathname.replace(/\/$/, "");
     if (req.method === "GET" && path === "/produtos/schema") return send(res, 200, SCHEMA);
-    if (req.method === "GET" && (path === "" || path === "/produtos"))
-      return send(res, 200, { ok: true, uso: "POST /produtos com um produto ou uma lista (JSON). Formato em GET /produtos/schema." });
-    if (req.method !== "POST" || path !== "/produtos") return send(res, 404, { error: "use POST /produtos ou GET /produtos/schema" });
+    if (req.method === "GET" && path === "/produtos") return send(res, 200, { produtos: await listGifts(fs) });
+    if (req.method === "GET" && path === "")
+      return send(res, 200, { ok: true, uso: "GET /produtos lista; POST /produtos cria; PATCH /produtos/<id> atualiza price/links/status. Formato em GET /produtos/schema." });
+    const patchId = req.method === "PATCH" && path.match(/^\/produtos\/([A-Za-z0-9]{1,40})$/)?.[1];
+    if (!patchId && (req.method !== "POST" || path !== "/produtos"))
+      return send(res, 404, { error: "use GET /produtos, POST /produtos, PATCH /produtos/<id> ou GET /produtos/schema" });
 
     let raw = "";
     for await (const chunk of req) {
@@ -169,6 +223,11 @@ async function main() {
     } catch {
       return send(res, 400, { error: "JSON inválido" });
     }
+    if (patchId) {
+      const result = await updateGift(fs, patchId, body).catch((e) => ({ errors: [`falha ao gravar: ${e.message}`] }));
+      return send(res, result.errors ? 400 : 200, result.errors ? { error: "atualização inválida", detalhes: result.errors } : result);
+    }
+
     const checked = [body].flat().map(validateProduct);
     const bad = checked.flatMap((c, index) => (c.errors ? [{ index, errors: c.errors }] : []));
     // All or nothing: a batch with one bad product saves none, so the AI can fix and resend the whole thing.
@@ -184,7 +243,7 @@ async function main() {
     }
   }).listen(PORT, "127.0.0.1", () => {
     // shortcut: no token, the server only listens on 127.0.0.1 and allowed() refuses websites; add one if it ever needs to be reachable from another device
-    console.log(`API da lista em http://127.0.0.1:${PORT}  (POST /produtos, GET /produtos/schema). Ctrl+C para parar.`);
+    console.log(`API da lista em http://127.0.0.1:${PORT}  (GET/POST /produtos, PATCH /produtos/<id>, GET /produtos/schema). Ctrl+C para parar.`);
   });
 }
 
