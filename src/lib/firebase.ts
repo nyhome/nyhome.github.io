@@ -6,7 +6,7 @@ import {
 import type { Delivery, Gift } from "@/data/gifts";
 
 // UI only: the real gate is isAdmin() in firestore.rules.
-export const ADMIN_UIDS = ["lEYtbTBbpfXaUdzz7sQq05Qz1c32", "ADMIN_UID_2"];
+export const ADMIN_UIDS = ["lEYtbTBbpfXaUdzz7sQq05Qz1c32", "mVGO28Yprqcc7z60fCev1GdDlTo1"];
 
 const EMULATOR = process.env.NEXT_PUBLIC_EMULATOR === "1";
 

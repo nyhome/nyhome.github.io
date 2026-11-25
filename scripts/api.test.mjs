@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { validateProduct } from "./api.mjs";
+import { allowed, normalizePhotos, validateProduct } from "./api.mjs";
 
 const ok = {
   name: "Cafeteira", model: "Oster OCAF650 127V", room: "cozinha", price: 130.05,
@@ -37,4 +37,38 @@ test("price as a pt-BR string and draft status are accepted", () => {
   const { value } = validateProduct({ ...ok, price: "129,90", status: "draft" });
   assert.equal(value.price, 129.9);
   assert.equal(value.status, "draft");
+});
+
+test("allowed: only non-browser clients on this Mac can post", () => {
+  const post = (headers) => allowed({ method: "POST", headers: { host: "127.0.0.1:4321", "content-type": "application/json", ...headers } }, 4321);
+  assert.equal(post({}), true);
+  assert.equal(post({ origin: "http://127.0.0.1:4321" }), true);
+  assert.equal(post({ origin: "https://evil.example" }), false);
+  assert.equal(post({ origin: "null" }), false);
+  assert.equal(post({ origin: "chrome-extension://abcdef" }), false);
+  assert.equal(post({ "content-type": "text/plain" }), false);
+  assert.equal(post({ host: "evil.example:4321" }), false);
+  assert.equal(allowed({ method: "GET", headers: { host: "localhost:4321" } }, 4321), true);
+});
+
+
+test("normalizePhotos keeps one sharp copy of each photo", () => {
+  assert.deepEqual(
+    normalizePhotos([
+      "https://m.media-amazon.com/images/I/51vVvDVetDL._AC_SX300_.jpg",
+      "https://m.media-amazon.com/images/I/51vVvDVetDL._AC_SL1500_.jpg",
+      "https://http2.mlstatic.com/D_Q_NP_620123-MLB71234_092023-R.webp",
+      "https://http2.mlstatic.com/D_NQ_NP_2X_620123-MLB71234_092023-F.webp",
+      "https://down-br.img.susercontent.com/file/br-11134207-abc_tn",
+      "https://down-br.img.susercontent.com/file/br-11134207-abc",
+      "https://loja.com/foto1.jpg",
+      "https://loja.com/foto1.jpg",
+    ]),
+    [
+      "https://m.media-amazon.com/images/I/51vVvDVetDL.jpg",
+      "https://http2.mlstatic.com/D_NQ_NP_2X_620123-MLB71234_092023-F.webp",
+      "https://down-br.img.susercontent.com/file/br-11134207-abc",
+      "https://loja.com/foto1.jpg",
+    ],
+  );
 });

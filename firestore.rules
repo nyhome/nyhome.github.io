@@ -10,7 +10,7 @@ service cloud.firestore {
   match /databases/{db}/documents {
 
     function isAdmin() {
-      return request.auth != null && request.auth.uid in ['lEYtbTBbpfXaUdzz7sQq05Qz1c32', 'ADMIN_UID_2'];
+      return request.auth != null && request.auth.uid in ['lEYtbTBbpfXaUdzz7sQq05Qz1c32', 'mVGO28Yprqcc7z60fCev1GdDlTo1'];
     }
 
     // Same 72h as HOLD_HOURS in src/lib/catalog.ts and HOLD_MS in scripts/mailer.mjs.

@@ -6,7 +6,7 @@ Site estático (Next.js `output: "export"`) publicado no GitHub Pages em `nyhome
 - `/reserva?t=…`: o link pessoal do convidado, com os botões **Já comprei** e **Desistir**.
 - `/admin`: o painel dos noivos (login com Google). Dá pra adicionar, editar, publicar, marcar comprado, "comprado por nós", liberar reserva, corrigir parentesco e editar o endereço de entrega.
 - `scripts/mailer.mjs`: roda a cada 15 min no GitHub Actions ([`mailer.yml`](.github/workflows/mailer.yml)). Manda o e-mail de reserva, o lembrete de 48h, o aviso de expiração em 72h (e devolve o presente pra lista) e o aviso de compra para os noivos, tudo pelo Gmail.
-- `scripts/importar.mjs`: transforma links de anúncio em rascunhos (Playwright + Ollama local).
+- **Adicionar produtos:** a skill `/presente` do Claude Code (em `~/.claude/skills/presente`) abre os links no seu Chrome logado (`claude --chrome`), monta o produto com link de afiliado e outras lojas, e grava com `scripts/produto.mjs`.
 
 ## Desenvolvimento local
 
@@ -21,7 +21,7 @@ NEXT_PUBLIC_EMULATOR=1 npm run dev
 No emulador, o login Google abre uma tela falsa de contas. Os UIDs de admin nas regras (`ADMIN_UID_1`/`ADMIN_UID_2`) valem enquanto não forem trocados pelos reais.
 
 ```bash
-npm test             # catálogo, mailer e importador
+npm test             # catálogo, mailer e API de produtos
 npm run test:rules   # regras de segurança no emulador
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8177 DRY_RUN=1 ADMIN_EMAILS=a@b.c npm run mailer   # e-mails sem enviar
 ```
@@ -33,20 +33,7 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8177 DRY_RUN=1 ADMIN_EMAILS=a@b.c npm run mail
 - `GET /produtos/schema`: ler o formato do produto (JSON Schema);
 - `POST /produtos`: mandar um produto, ou uma lista, que é **publicado na hora**. Com `"status": "draft"` ele entra como rascunho pra revisar no painel.
 
-Se algum produto vier inválido, a resposta é 400 com o que corrigir e nada é gravado.
-
-## Importar anúncios (linha de comando)
-
-```bash
-brew install ollama && ollama serve &   # uma vez
-ollama pull qwen2.5:7b                  # ~4,7 GB
-npm run importar -- --dry <url>         # só mostra o que extraiu
-npm run importar -- <url> <url> ...     # salva como rascunho (precisa do service-account.json)
-```
-
-O script também procura o mesmo código de modelo em outras lojas. `npm run importador:login` abre o Chrome do importador pra você logar uma vez no Mercado Livre, na Shopee e na Amazon; sem login, essas buscas costumam esbarrar em captcha e a loja fica de fora.
-
-O navegador abre de verdade. Se a loja pedir login ou captcha, resolva lá e aperte Enter no terminal; o perfil fica salvo em `.playwright-profile/`. Depois revise o rascunho em `/admin` e publique.
+Se algum produto vier inválido, a resposta é 400 com o que corrigir e nada é gravado. A mesma validação vale para `node scripts/produto.mjs < produto.json`, que é o que a skill `/presente` usa (formato: `node scripts/produto.mjs --schema`).
 
 ## Produção
 
