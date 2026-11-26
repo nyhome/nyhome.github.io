@@ -33,6 +33,11 @@ export const holdEndsAt = (reservedAt: number) => reservedAt + HOLD_MS;
 /** Units still open to a new reservation. Holds past 72h keep counting until the mailer clears them (≤15 min). */
 export const unitsLeft = (g: Gift) => Math.max(0, g.quantity - g.boughtUnits - g.heldUnits);
 
+/** On the guests' catalog: published and not hidden. */
+// shortcut: hidden gifts are filtered here, not in firestore.rules, so they stay readable by id (guests holding one still
+// see their reservation); move it into the rules if hiding ever has to keep the data secret.
+export const isListed = (g: Gift) => g.status !== "draft" && !g.hidden;
+
 export const isSoldOut = (g: Gift) => g.status === "bought" || unitsLeft(g) === 0;
 
 /** Gifts a guest can see, by price, sold-out ones last within each room. Ranges include the lower bound only. */
@@ -41,7 +46,7 @@ export function visibleGifts(gifts: Gift[], room: RoomId | "todos", price: Price
   return gifts
     .filter(
       (g) =>
-        g.status !== "draft" &&
+        isListed(g) &&
         (room === "todos" || g.room === room) &&
         g.price >= range.min &&
         (range.max === Infinity ? true : g.price < range.max),
@@ -51,7 +56,7 @@ export function visibleGifts(gifts: Gift[], room: RoomId | "todos", price: Price
 
 /** "3 de 8 presentes escolhidos", counted in units: 3 sheet sets are 3 gifts. The couple's own count too. */
 export function roomProgress(gifts: Gift[], room: RoomId): { chosen: number; total: number } {
-  const inRoom = gifts.filter((g) => g.room === room && g.status !== "draft");
+  const inRoom = gifts.filter((g) => g.room === room && isListed(g));
   return { chosen: inRoom.reduce((n, g) => n + g.boughtUnits, 0), total: inRoom.reduce((n, g) => n + g.quantity, 0) };
 }
 

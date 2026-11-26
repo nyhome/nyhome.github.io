@@ -21,6 +21,7 @@ const gifts = [
   gift("d", "cozinha", 1290, held()),
   gift("e", "cozinha", 499),
   gift("x", "cozinha", 300, { status: "draft" }),
+  gift("h", "cozinha", 200, { hidden: true }),
 ];
 
 test("activeIndex splits progress into equal slices and clamps the ends", () => {
@@ -33,7 +34,7 @@ test("activeIndex splits progress into equal slices and clamps the ends", () => 
   assert.equal(activeIndex(0.5, 0), 0);
 });
 
-test("visibleGifts hides drafts, keeps sold-out gifts and puts them last", () => {
+test("visibleGifts hides drafts and hidden gifts, keeps sold-out gifts and puts them last", () => {
   assert.deepEqual(visibleGifts(gifts, "todos", "todos").map((g) => g.id), ["a", "b", "e", "c", "d"]);
   assert.deepEqual(visibleGifts(gifts, "sala", "todos").map((g) => g.id), ["a", "b", "c"]);
 });

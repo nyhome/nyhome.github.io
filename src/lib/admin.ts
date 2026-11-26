@@ -118,6 +118,9 @@ export const deleteGift = (id: string) =>
 
 export const publish = (id: string) => updateDoc(doc(db(), "gifts", id), { status: "available" });
 
+/** Takes a published gift off the guests' catalog or puts it back; reservations and purchases stay as they are. */
+export const setHidden = (id: string, hidden: boolean) => updateDoc(doc(db(), "gifts", id), { hidden });
+
 /** Closes a guest's hold as a purchase (they forgot "Já comprei") or frees it, if it is still open. */
 const closeHold = (res: Reservation, outcome: "bought" | "released") =>
   runTransaction(db(), async (tx) => {

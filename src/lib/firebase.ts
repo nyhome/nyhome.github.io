@@ -51,6 +51,7 @@ export function toGift(id: string, d: DocumentData): Gift {
     links: d.links ?? [],
     photos: d.photos ?? [],
     status: d.status,
+    hidden: d.hidden === true,
     quantity,
     boughtUnits: d.boughtUnits ?? (d.status === "bought" ? quantity : 0),
     heldUnits: d.heldUnits ?? 0,

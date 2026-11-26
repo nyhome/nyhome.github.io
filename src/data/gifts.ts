@@ -39,6 +39,8 @@ export interface Gift {
   links: GiftLink[];
   photos: string[];
   status: GiftStatus;
+  /** Published but taken off the catalog by the couple (the toggle in the panel). */
+  hidden?: boolean;
   /** Units wanted; guests each give some (one reservation per guest). Single gifts are just quantity 1. */
   quantity: number;
   boughtUnits: number;

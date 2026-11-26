@@ -6,12 +6,13 @@ import { AlertDialog } from "@astryxdesign/core/AlertDialog";
 import { Button } from "@astryxdesign/core/Button";
 import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { Selector } from "@astryxdesign/core/Selector";
+import { Switch } from "@astryxdesign/core/Switch";
 import { Tab, TabList } from "@astryxdesign/core/TabList";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { ROOMS, TIERS, type Delivery, type Gift } from "@/data/gifts";
 import {
-  AdminError, boughtByUs, deleteGift, fetchAll, logOut, markBought, publish, releaseHold, saveDelivery, setTier, signIn, undoPurchases,
+  AdminError, boughtByUs, deleteGift, fetchAll, logOut, markBought, publish, releaseHold, saveDelivery, setHidden, setTier, signIn, undoPurchases,
   watchUser, type AdminData,
 } from "@/lib/admin";
 import { formatBRL, holdEndsAt, unitsLeft } from "@/lib/catalog";
@@ -214,6 +215,7 @@ function Row({
         <span className={styles.muted}>
           {formatBRL(g.price)}{multi && " cada"} · <span data-status={status === "Comprado por nós" ? "couple" : g.status}>{status}</span>
           {units && ` · ${units}`}
+          {g.hidden && " · Oculto no site"}
         </span>
         {g.givers.length > 0 && (
           <span className={styles.muted}>
@@ -247,6 +249,15 @@ function Row({
         })}
       </div>
       <div className={styles.rowActions}>
+        {g.status !== "draft" && (
+          <Switch
+            label="Visível no site"
+            size="sm"
+            value={!g.hidden}
+            isDisabled={busy}
+            onChange={(on) => onAction(() => setHidden(g.id, !on))}
+          />
+        )}
         {g.status === "draft" && <Button label="Publicar" variant="primary" size="sm" isDisabled={busy} onClick={() => onAction(() => publish(g.id))} />}
         {g.status !== "draft" && left > 0 && (
           <Button
