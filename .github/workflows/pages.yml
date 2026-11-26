@@ -19,6 +19,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # The self-hosted auth helper reads this file; generated here so the API key stays out of git.
+      - run: node -e 'const fs=require("fs");const c=JSON.parse(process.env.CONFIG);if(!c.apiKey)throw new Error("apiKey missing");fs.mkdirSync("public/__/firebase",{recursive:true});fs.writeFileSync("public/__/firebase/init.json",JSON.stringify(c))'
+        env:
+          CONFIG: ${{ vars.NEXT_PUBLIC_FIREBASE_CONFIG }}
       - run: npm run build
         env:
           # Public Firebase web config (JSON from `firebase apps:sdkconfig`); a repo variable, not a secret.

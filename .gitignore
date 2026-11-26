@@ -42,6 +42,7 @@ next-env.d.ts
 
 # firebase / scripts
 service-account*.json
+/public/__/firebase/init.json
 firebase-debug.log
 firestore-debug.log
 .firebase/

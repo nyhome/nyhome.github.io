@@ -49,7 +49,7 @@ O cron do GitHub atrasa às vezes, e é desligado depois de 60 dias sem commit n
 
 ### Login no iPhone (Safari)
 
-O login usa `authDomain: nyhome.github.io` (variável `NEXT_PUBLIC_FIREBASE_CONFIG` do repositório) e serve os arquivos de login do Firebase em `public/__/auth/`. Sem isso, o Safari bloqueia o armazenamento do domínio `firebaseapp.com` e o login falha com "missing initial state". Pra atualizar esses arquivos de vez em quando:
+O login usa `authDomain: nyhome.github.io` (variável `NEXT_PUBLIC_FIREBASE_CONFIG` do repositório) e serve os arquivos de login do Firebase em `public/__/auth/`. Sem isso, o Safari bloqueia o armazenamento do domínio `firebaseapp.com` e o login falha com "missing initial state". O `public/__/firebase/init.json` é gerado no deploy a partir dessa variável e não vai pro git. Pra atualizar os arquivos de `__/auth/` de vez em quando:
 
 ```bash
 for f in handler iframe; do curl -s https://casa-ny-lista.firebaseapp.com/__/auth/$f -o public/__/auth/$f.html; done
