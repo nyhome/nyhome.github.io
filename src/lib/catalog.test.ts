@@ -72,7 +72,7 @@ test("roomProgress counts units, the couple's own included, and ignores drafts",
 test("giverLabel names givers and holders, or marks the couple's own purchase", () => {
   assert.equal(giverLabel(gift("a", "sala", 1, bought({ givers: [{ name: "Maria", tier: "Prima", units: 1 }] }))), "Presente de Maria · Prima");
   assert.equal(giverLabel(gift("a", "sala", 1, held("Maria", "Prima"))), "Presente de Maria · Prima");
-  assert.equal(giverLabel(gift("a", "sala", 1, bought({ givers: [{ name: "", tier: "", units: 1, byCouple: true }] }))), "Dos noivos");
+  assert.equal(giverLabel(gift("a", "sala", 1, bought({ givers: [{ name: "", tier: "", units: 1, byCouple: true }] }))), "Comprado pelos noivos");
   assert.equal(giverLabel(gift("a", "sala", 1)), null);
   const many = gift("s", "quarto", 1, { quantity: 3, givers: [{ name: "Ana", tier: "Tia", units: 1 }, { name: "João", tier: "Tio", units: 1 }], ...held("Bia", "Amiga") });
   assert.equal(giverLabel(many), "Presente de Ana, João e mais 1");

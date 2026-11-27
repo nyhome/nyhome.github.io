@@ -60,14 +60,14 @@ export function roomProgress(gifts: Gift[], room: RoomId): { chosen: number; tot
   return { chosen: inRoom.reduce((n, g) => n + g.boughtUnits, 0), total: inRoom.reduce((n, g) => n + g.quantity, 0) };
 }
 
-/** Who is giving it, bought or on hold: "Presente de Maria · Prima", "Presente de Maria e João", "Dos noivos". */
+/** Who is giving it, bought or on hold: "Presente de Maria · Prima", "Presente de Maria e João", "Comprado pelos noivos". */
 export function giverLabel(g: Gift): string | null {
   const people = [
     ...g.givers.filter((x) => !x.byCouple).map((x) => ({ name: x.name, tier: x.tier })),
     ...Object.values(g.holds).map((h) => ({ name: h.giverName, tier: h.giverTier })),
   ];
   const couple = g.givers.some((x) => x.byCouple);
-  if (!people.length) return couple ? "Dos noivos" : null;
+  if (!people.length) return couple ? "Comprado pelos noivos" : null;
   const names = [...new Set(people.map((p) => p.name))];
   const who =
     names.length === 1

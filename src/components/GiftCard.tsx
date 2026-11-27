@@ -49,7 +49,7 @@ export function GiftCard({ gift, order, onOpen }: Props) {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         {cover && <img src={cover} alt={gift.name} referrerPolicy="no-referrer" loading="lazy" onError={hide} />}
         {label && (
-          <span className={styles.badge} data-couple={label === "Dos noivos" || undefined}>
+          <span className={styles.badge} data-couple={label === "Comprado pelos noivos" || undefined}>
             {label}
           </span>
         )}

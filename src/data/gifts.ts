@@ -66,7 +66,7 @@ export interface Giver {
   name: string;
   tier: string;
   units: number;
-  /** Bought by the couple themselves ("Dos noivos"). */
+  /** Bought by the couple themselves ("Comprado pelos noivos"). */
   byCouple?: boolean;
 }
 
