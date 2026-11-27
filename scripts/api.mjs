@@ -102,7 +102,7 @@ export function validateProduct(p) {
   if (errors.length) return { errors };
   return {
     value: {
-      name, room: p.room, price: Math.round(price * 100) / 100, quantity,
+      name, room: p.room, price: Math.round(price * 100) / 100, lowestPrice: Math.round(price * 100) / 100, quantity,
       model: str(p.model, 200), brand: str(p.brand, 60), description: str(p.description, 300), dims: str(p.dims, 60),
       ...(voltage ? { voltage } : {}),
       links: links.map((l) => (str(l.coupon, 40) ? { store: str(l.store, 40), url: l.url, coupon: str(l.coupon, 40).toUpperCase() } : { store: str(l.store, 40), url: l.url })),
@@ -139,6 +139,12 @@ export function mergeUpdate(current, patch) {
   if (errors) return { errors };
   const update = {};
   for (const k of UPDATABLE) if (patch[k] !== undefined) update[k] = value[k];
+  // The lowest price ever seen only goes down on its own; the couple can still edit it in the panel.
+  if (update.price !== undefined) {
+    // Gifts from before the field existed start from their old price.
+    const lowest = Math.min(current.lowestPrice ?? current.price ?? Infinity, update.price);
+    if (lowest !== current.lowestPrice) update.lowestPrice = lowest;
+  }
   // A published gift is "bought" exactly when every unit is: more units reopen it, fewer can close it.
   const status = update.status ?? current.status;
   if (update.quantity !== undefined && status !== "draft") {

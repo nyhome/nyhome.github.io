@@ -31,6 +31,16 @@
   color: var(--color-text-secondary);
 }
 
+.lowest {
+  justify-self: start;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--olive);
+  color: var(--olive);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
 .units {
   color: var(--olive);
   font-weight: 500;

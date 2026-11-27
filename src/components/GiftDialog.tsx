@@ -128,6 +128,9 @@ function Content({ gift, delivery, onClose, onChanged }: Omit<Props, "gift"> & {
                 {formatBRL(gift.price)}
                 {gift.quantity > 1 && <span className={styles.each}> cada</span>}
               </p>
+              <p className={styles.lowest}>
+                {gift.lowestPrice < gift.price ? `Menor preço já visto: ${formatBRL(gift.lowestPrice)}` : "No menor preço já visto"}
+              </p>
               {unitsLabel(gift) && <p className={styles.units}>{unitsLabel(gift)}</p>}
               <p className={styles.note}>Preço de referência. Confira o valor e o estoque na loja.</p>
               {gift.description && <p className={styles.description}>{gift.description}</p>}

@@ -6,7 +6,7 @@ import type { Gift } from "../data/gifts.ts";
 const DAY = 864e5;
 const NOW = Date.UTC(2026, 10, 24, 12);
 const gift = (id: string, room: Gift["room"], price: number, extra: Partial<Gift> = {}): Gift => ({
-  id, room, price, status: "available", name: id, model: "", brand: "", description: "", links: [], photos: [],
+  id, room, price, lowestPrice: price, status: "available", name: id, model: "", brand: "", description: "", links: [], photos: [],
   quantity: 1, boughtUnits: 0, heldUnits: 0, holds: {}, givers: [], ...extra,
 });
 

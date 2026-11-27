@@ -36,6 +36,8 @@ export interface Gift {
   variants?: string[];
   /** Reference price, used by the price filters. */
   price: number;
+  /** Lowest price ever saved (or typed in by the couple from elsewhere); never above price. */
+  lowestPrice: number;
   links: GiftLink[];
   photos: string[];
   status: GiftStatus;

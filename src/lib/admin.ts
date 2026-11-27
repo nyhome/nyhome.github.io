@@ -72,6 +72,7 @@ export interface GiftInput {
   /** "" when it isn't electrical. */
   voltage: Voltage | "";
   price: number;
+  lowestPrice: number;
   links: GiftLink[];
   photos: string[];
   quantity: number;
@@ -94,7 +95,7 @@ const statusFor = (g: Gift, boughtUnits: number, quantity = g.quantity) =>
 export async function saveGift(id: string | null, input: GiftInput) {
   // Firestore rejects undefined: drop the optional coupon when empty.
   const links = input.links.map(({ store, url, coupon }) => (coupon ? { store, url, coupon } : { store, url }));
-  const data = { ...input, links };
+  const data = { ...input, links, lowestPrice: Math.min(input.lowestPrice, input.price) };
   if (id)
     return runTransaction(db(), async (tx) => {
       const g = await current(tx, id);

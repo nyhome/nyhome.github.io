@@ -26,6 +26,9 @@ export function GiftForm({ target, onClose, onSaved }: Props) {
   );
 }
 
+// "1.299,90" / "1.299" (pt-BR) or "1299.90": a comma, or dots grouping thousands, mean pt-BR.
+const parsePrice = (p: string) => Number(p.includes(",") || /^\d{1,3}(\.\d{3})+$/.test(p) ? p.replace(/\./g, "").replace(",", ".") : p);
+
 const emptyLink = (): GiftLink => ({ store: "", url: "", coupon: "" });
 
 function Form({ gift, onClose, onSaved }: { gift: Gift | null; onClose: () => void; onSaved: () => void }) {
@@ -34,6 +37,7 @@ function Form({ gift, onClose, onSaved }: { gift: Gift | null; onClose: () => vo
   const [brand, setBrand] = useState(gift?.brand ?? "");
   const [room, setRoom] = useState<RoomId | undefined>(gift?.room);
   const [price, setPrice] = useState(gift ? String(gift.price) : "");
+  const [lowestPrice, setLowestPrice] = useState(gift ? String(gift.lowestPrice) : "");
   const [quantity, setQuantity] = useState(String(gift?.quantity ?? 1));
   const [dims, setDims] = useState(gift?.dims ?? "");
   const [voltage, setVoltage] = useState<Voltage | "">(gift?.voltage ?? "");
@@ -45,12 +49,16 @@ function Form({ gift, onClose, onSaved }: { gift: Gift | null; onClose: () => vo
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // "1.299,90" / "1.299" (pt-BR) or "1299.90": a comma, or dots grouping thousands, mean pt-BR.
-    const p = price.trim();
-    const value = Number(p.includes(",") || /^\d{1,3}(\.\d{3})+$/.test(p) ? p.replace(/\./g, "").replace(",", ".") : p);
+    const value = parsePrice(price.trim());
+    // Empty = the price itself; saveGift keeps the smaller of the two, so a cheaper price lowers it on its own.
+    const lowest = lowestPrice.trim() ? parsePrice(lowestPrice.trim()) : value;
     const cleanLinks = links.filter((l) => l.url.trim()).map((l) => ({ store: l.store.trim() || "Loja", url: l.url.trim(), coupon: l.coupon?.trim() }));
     if (!name.trim() || !room || !price.trim() || !Number.isFinite(value) || value < 0) {
       setError("Preencha nome, cômodo e um preço válido.");
+      return;
+    }
+    if (!Number.isFinite(lowest) || lowest < 0) {
+      setError("O menor preço precisa ser um valor válido.");
       return;
     }
     if (cleanLinks.some((l) => !/^https?:\/\//.test(l.url))) {
@@ -72,7 +80,7 @@ function Form({ gift, onClose, onSaved }: { gift: Gift | null; onClose: () => vo
     try {
       await saveGift(gift?.id ?? null, {
         room, name: name.trim(), model: model.trim(), brand: brand.trim(), description: description.trim(), dims: dims.trim(), voltage, quantity: qty,
-        price: value, links: cleanLinks, photos: photos.map((p) => p.trim()).filter(Boolean),
+        price: value, lowestPrice: lowest, links: cleanLinks, photos: photos.map((p) => p.trim()).filter(Boolean),
       });
       onSaved();
       onClose();
@@ -93,6 +101,13 @@ function Form({ gift, onClose, onSaved }: { gift: Gift | null; onClose: () => vo
           <Selector label="Cômodo" placeholder="Escolha" options={ROOMS.map((r) => ({ value: r.id, label: r.name }))} value={room} onChange={(v) => setRoom(v as RoomId)} isRequired />
           <TextInput label="Preço de referência (R$)" description="Por unidade." value={price} onChange={setPrice} isRequired />
         </div>
+        <TextInput
+          label="Menor preço já visto (R$)"
+          description="Guarda sozinho o menor preço salvo. Se viu mais barato em outro lugar, coloque aqui."
+          value={lowestPrice}
+          onChange={setLowestPrice}
+          isOptional
+        />
         <TextInput
           label="Quantidade"
           description="Quantas unidades vocês querem. Cada convidado escolhe quantas vai dar."

@@ -52,6 +52,15 @@ test("allowed: only non-browser clients on this Mac can post", () => {
 });
 
 
+test("mergeUpdate: lowestPrice only goes down when the price changes", () => {
+  const g = { name: "X", room: "sala", price: 100, links: [{ store: "A", url: "https://a.co" }], status: "available" };
+  assert.equal(mergeUpdate(g, { price: 120 }).update.lowestPrice, 100);
+  assert.equal(mergeUpdate({ ...g, lowestPrice: 80 }, { price: 120 }).update.lowestPrice, undefined);
+  assert.equal(mergeUpdate({ ...g, lowestPrice: 80 }, { price: 70 }).update.lowestPrice, 70);
+  assert.equal(mergeUpdate(g, { links: g.links }).update.lowestPrice, undefined);
+  assert.equal(validateProduct(g).value.lowestPrice, 100);
+});
+
 test("normalizePhotos keeps one sharp copy of each photo", () => {
   assert.deepEqual(
     normalizePhotos([
@@ -84,12 +93,12 @@ test("voltage is optional and normalized from how an AI tends to write it", () =
 test("mergeUpdate changes only price/links/status, normalized, and never a held gift's status", () => {
   const current = { ...ok, status: "available", voltage: "127V", byCouple: false };
   const { update } = mergeUpdate(current, { price: "119,90", links: [{ store: "Amazon", url: "https://amzn.to/novo", coupon: "off5" }] });
-  assert.deepEqual(update, { price: 119.9, links: [{ store: "Amazon", url: "https://amzn.to/novo", coupon: "OFF5" }] });
+  assert.deepEqual(update, { price: 119.9, links: [{ store: "Amazon", url: "https://amzn.to/novo", coupon: "OFF5" }], lowestPrice: 119.9 });
   assert.deepEqual(mergeUpdate(current, { status: "draft" }).update, { status: "draft" });
   assert.ok(mergeUpdate(current, { name: "Outro" }).errors[0].includes("recusado: name"));
   assert.ok(mergeUpdate(current, { links: [] }).errors);
   assert.ok(mergeUpdate({ ...current, status: "reserved" }, { status: "draft" }).errors);
-  assert.deepEqual(mergeUpdate({ ...current, status: "bought" }, { price: 99 }).update, { price: 99 });
+  assert.deepEqual(mergeUpdate({ ...current, status: "bought" }, { price: 99 }).update, { price: 99, lowestPrice: 99 });
 });
 
 test("quantity defaults to 1, must be a whole number, and can't drop below units already taken", () => {
@@ -116,5 +125,5 @@ test("quantity changes move a published gift between available and bought", () =
 test("mergeUpdate won't hide a gift that has active reservations", () => {
   const current = { ...ok, status: "available", quantity: 3, boughtUnits: 0, heldUnits: 1 };
   assert.ok(mergeUpdate(current, { status: "draft" }).errors[0].includes("reservas ativas"));
-  assert.deepEqual(mergeUpdate(current, { price: 50 }).update, { price: 50 });
+  assert.deepEqual(mergeUpdate(current, { price: 50 }).update, { price: 50, lowestPrice: 50 });
 });
