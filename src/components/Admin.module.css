@@ -136,6 +136,14 @@
   max-width: 460px;
 }
 
+.links {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 4px;
+  list-style: none;
+}
+
 .tier {
   width: 130px;
 }

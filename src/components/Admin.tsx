@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { AlertDialog } from "@astryxdesign/core/AlertDialog";
 import { Button } from "@astryxdesign/core/Button";
+import { Collapsible } from "@astryxdesign/core/Collapsible";
 import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { Selector } from "@astryxdesign/core/Selector";
 import { Switch } from "@astryxdesign/core/Switch";
@@ -221,6 +222,18 @@ function Row({
           <span className={styles.muted}>
             Deram: {g.givers.map((x) => (x.byCouple ? "nós" : `${x.name} (${x.tier})`) + (multi ? ` ×${x.units}` : "")).join(", ")}
           </span>
+        )}
+        {g.links.length > 0 && (
+          <Collapsible trigger={<span className={styles.muted}>Links ({g.links.length})</span>} defaultIsOpen={false}>
+            <ul className={styles.links}>
+              {g.links.map((l, i) => (
+                <li key={l.url + i}>
+                  <a href={l.url} target="_blank" rel="noopener noreferrer">{l.store || l.url}</a>
+                  {l.coupon && <span className={styles.muted}> · cupom {l.coupon}</span>}
+                </li>
+              ))}
+            </ul>
+          </Collapsible>
         )}
         {reservations.map((r) => {
           const ends = holdEndsAt(r.reservedAt);
