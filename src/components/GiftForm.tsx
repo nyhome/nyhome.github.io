@@ -27,7 +27,7 @@ export function GiftForm({ target, onClose, onSaved }: Props) {
 }
 
 // "1.299,90" / "1.299" (pt-BR) or "1299.90": a comma, or dots grouping thousands, mean pt-BR.
-const parsePrice = (p: string) => Number(p.includes(",") || /^\d{1,3}(\.\d{3})+$/.test(p) ? p.replace(/\./g, "").replace(",", ".") : p);
+export const parsePrice = (p: string) => Number(p.includes(",") || /^\d{1,3}(\.\d{3})+$/.test(p) ? p.replace(/\./g, "").replace(",", ".") : p);
 
 const emptyLink = (): GiftLink => ({ store: "", url: "", coupon: "" });
 

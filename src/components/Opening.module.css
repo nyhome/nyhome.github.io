@@ -63,6 +63,17 @@
   margin-top: -12px;
 }
 
+.goal {
+  max-width: 34ch;
+  display: grid;
+  gap: 8px;
+}
+
+.goalText {
+  font-size: 0.9375rem;
+  color: var(--color-text-secondary);
+}
+
 .cta {
   margin-top: 8px;
 }

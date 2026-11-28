@@ -11,15 +11,15 @@ import { Switch } from "@astryxdesign/core/Switch";
 import { Tab, TabList } from "@astryxdesign/core/TabList";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { TextInput } from "@astryxdesign/core/TextInput";
-import { ROOMS, TIERS, type Delivery, type Gift } from "@/data/gifts";
+import { GOAL_PRICE, GOAL_TARGET, ROOMS, TIERS, type Delivery, type Gift } from "@/data/gifts";
 import {
-  AdminError, boughtByUs, deleteGift, fetchAll, logOut, markBought, publish, releaseHold, saveDelivery, setHidden, setTier, signIn, undoPurchases,
-  watchUser, type AdminData,
+  AdminError, boughtByUs, deleteGift, fetchAll, fetchGoalPeople, logOut, markBought, publish, releaseHold, saveDelivery, saveGoal, setHidden, setLocked, setTier, signIn, undoPurchases,
+  watchUser, type AdminData, type GoalPeople,
 } from "@/lib/admin";
 import { formatBRL, holdEndsAt, unitsLeft } from "@/lib/catalog";
-import { ADMIN_UIDS, fetchDelivery, type Reservation } from "@/lib/firebase";
+import { ADMIN_UIDS, fetchDelivery, fetchGoal, type Reservation } from "@/lib/firebase";
 import { Dashboard } from "./Dashboard";
-import { GiftForm } from "./GiftForm";
+import { GiftForm, parsePrice } from "./GiftForm";
 import { hide } from "@/lib/hooks";
 import styles from "./Admin.module.css";
 
@@ -76,8 +76,9 @@ function Panel({ user }: { user: User }) {
         <Tab value="visao" label="Visão geral" />
         <Tab value="presentes" label="Presentes" />
         <Tab value="entrega" label="Entrega" />
+        <Tab value="meta" label="Meta" />
       </TabList>
-      {tab === "visao" ? <Dashboard /> : tab === "presentes" ? <Gifts /> : <DeliveryForm />}
+      {tab === "visao" ? <Dashboard /> : tab === "presentes" ? <Gifts /> : tab === "meta" ? <GoalForm user={user} /> : <DeliveryForm />}
     </main>
   );
 }
@@ -197,6 +198,8 @@ function Row({
   onDelete: () => void;
 }) {
   const left = unitsLeft(g);
+  const [ourUnits, setOurUnits] = useState(1);
+  const pick = Math.min(ourUnits, left);
   const multi = g.quantity > 1;
   const status =
     g.status === "draft" ? "Rascunho"
@@ -217,6 +220,7 @@ function Row({
           {formatBRL(g.price)}{multi && " cada"} · <span data-status={status === "Comprado por nós" ? "couple" : g.status}>{status}</span>
           {units && ` · ${units}`}
           {g.hidden && " · Oculto no site"}
+          {g.locked && " · Bloqueado até a casa"}
         </span>
         {g.givers.length > 0 && (
           <span className={styles.muted}>
@@ -271,14 +275,35 @@ function Row({
             onChange={(on) => onAction(() => setHidden(g.id, !on))}
           />
         )}
+        {g.status !== "draft" && (
+          <Switch
+            label="Bloquear até a casa"
+            size="sm"
+            value={g.locked === true}
+            isDisabled={busy}
+            onChange={(on) => onAction(() => setLocked(g.id, on))}
+          />
+        )}
         {g.status === "draft" && <Button label="Publicar" variant="primary" size="sm" isDisabled={busy} onClick={() => onAction(() => publish(g.id))} />}
+        {g.status !== "draft" && left > 1 && (
+          <span className={styles.tier}>
+            <Selector
+              label={`Quantas unidades de ${g.name} nós compramos`}
+              isLabelHidden
+              size="sm"
+              options={Array.from({ length: left }, (_, i) => ({ value: String(i + 1), label: `${i + 1} de ${left}` }))}
+              value={String(pick)}
+              onChange={(v) => setOurUnits(Number(v))}
+            />
+          </span>
+        )}
         {g.status !== "draft" && left > 0 && (
           <Button
-            label={multi ? `Compramos as ${left === 1 ? "1 restante" : `${left} restantes`}` : "Comprado por nós"}
+            label={left > 1 ? `Compramos ${pick === 1 ? "1 unidade" : `${pick} unidades`}` : "Comprado por nós"}
             variant="secondary"
             size="sm"
             isDisabled={busy}
-            onClick={() => onAction(() => boughtByUs(g))}
+            onClick={() => onAction(() => boughtByUs(g, pick))}
           />
         )}
         {g.boughtUnits > 0 && (
@@ -322,6 +347,71 @@ function DeliveryForm() {
         <Button label="Salvar" variant="primary" type="submit" isLoading={state === "saving"} />
         {state === "saved" && <span className={styles.muted}>Salvo.</span>}
         {state === "error" && <span className={styles.error}>Não deu para salvar.</span>}
+      </div>
+    </form>
+  );
+}
+
+function GoalForm({ user }: { user: User }) {
+  const [people, setPeople] = useState<GoalPeople | null>(null);
+  const [form, setForm] = useState({ target: "", mine: "", price: "" });
+  const [state, setState] = useState<"idle" | "saving" | "saved" | "error" | "invalid">("idle");
+  const load = useCallback(
+    () =>
+      Promise.all([fetchGoal(), fetchGoalPeople()])
+        .then(([g, p]) => {
+          setPeople(p);
+          setState("idle");
+          setForm({ target: String(g?.target ?? GOAL_TARGET), mine: p[user.uid] ? String(p[user.uid].amount) : "", price: String(g ? (g.price ?? "") : GOAL_PRICE) });
+          return true;
+        })
+        .catch(() => (setState("error"), false)),
+    [user.uid],
+  );
+  useEffect(() => void load(), [load]);
+  if (!people) return <p>{state === "error" ? "Não deu para carregar." : "Carregando…"}</p>;
+
+  const name = user.displayName?.split(" ")[0] || user.email || "Eu";
+  const total = Object.values(people).reduce((s, p) => s + p.amount, 0);
+  return (
+    <form
+      className={styles.form}
+      onSubmit={async (e) => {
+        e.preventDefault();
+        const target = parsePrice(form.target.trim());
+        const mine = form.mine.trim() ? parsePrice(form.mine.trim()) : 0;
+        const price = form.price.trim() ? parsePrice(form.price.trim()) : 0;
+        if ([target, mine, price].some((v) => !Number.isFinite(v) || v < 0)) return setState("invalid");
+        setState("saving");
+        try {
+          await saveGoal({ uid: user.uid, name }, mine, target, price);
+          if (await load()) setState("saved");
+        } catch {
+          setState("error");
+        }
+      }}
+    >
+      <p className={styles.muted}>
+        No site aparece só o total juntado e quanto falta pra entrada; quanto cada um tem fica só aqui. Meta 0 esconde a barra.
+      </p>
+      <ul className={styles.muted}>
+        {Object.entries(people).map(([uid, p]) => (
+          <li key={uid}>
+            {p.name}: {formatBRL(p.amount)}
+          </li>
+        ))}
+        <li>
+          <strong>Total: {formatBRL(total)}</strong>
+        </li>
+      </ul>
+      <TextInput label="Valor da entrada (R$)" value={form.target} onChange={(v) => setForm({ ...form, target: v })} isRequired />
+      <TextInput label="Valor do imóvel (R$)" description="Opcional, só pra referência. No site aparece como “Imóvel de até R$ …”." value={form.price} onChange={(v) => setForm({ ...form, price: v })} />
+      <TextInput label={`Quanto eu (${name}) já tenho (R$)`} value={form.mine} onChange={(v) => setForm({ ...form, mine: v })} />
+      <div className={styles.actions}>
+        <Button label="Salvar" variant="primary" type="submit" isLoading={state === "saving"} />
+        {state === "saved" && <span className={styles.muted}>Salvo.</span>}
+        {state === "error" && <span className={styles.error}>Não deu para salvar.</span>}
+        {state === "invalid" && <span className={styles.error}>Use valores válidos, tipo 80.000 ou 80000,00.</span>}
       </div>
     </form>
   );

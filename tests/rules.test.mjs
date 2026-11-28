@@ -147,6 +147,13 @@ test("drafts and fully bought gifts can't be reserved", async () => {
   await assertFails(reserve(guest(), "b"));
 });
 
+test("locked gifts can't be reserved until unlocked", async () => {
+  await seed("gifts/l", giftData({ locked: true }));
+  await assertFails(reserve(guest(), "l"));
+  await seed("gifts/l", giftData({ locked: false }));
+  await assertSucceeds(reserve(guest(), "l"));
+});
+
 test("partial reserve batches fail", async () => {
   await seed("gifts/a", giftData());
   await assertFails(reserve(guest(), "a", { skipLock: true }));
@@ -258,6 +265,14 @@ test("admins (by UID) do everything; other accounts don't", async () => {
   const other = env.authenticatedContext("someone-else").firestore();
   await assertFails(setDoc(doc(other, "gifts", "n"), giftData()));
   await assertFails(getDocs(collection(other, "reservations")));
+});
+
+test("private: admin only", async () => {
+  await seed("private/goal", { people: { admin: { name: "Y", amount: 1 } } });
+  await assertFails(getDoc(doc(guest(), "private", "goal")));
+  await assertFails(setDoc(doc(guest(), "private", "goal"), { people: {} }));
+  await assertSucceeds(getDoc(doc(admin(), "private", "goal")));
+  await assertSucceeds(setDoc(doc(admin(), "private", "goal"), { people: {} }));
 });
 
 test("delivery settings: public read, admin write", async () => {

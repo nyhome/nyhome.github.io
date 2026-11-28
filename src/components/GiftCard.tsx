@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import { Button } from "@astryxdesign/core/Button";
 import type { Gift } from "@/data/gifts";
-import { formatBRL, giverLabel, isSoldOut, unitsLabel } from "@/lib/catalog";
+import { formatBRL, giverLabel, isLocked, isSoldOut, unitsLabel } from "@/lib/catalog";
 import { useSeenOnce, hide } from "@/lib/hooks";
 import styles from "./GiftCard.module.css";
 
@@ -23,7 +23,8 @@ export function GiftCard({ gift, order, onOpen }: Props) {
   const seen = useSeenOnce(ref, "0px 0px -4% 0px");
   const soldOut = isSoldOut(gift);
   // Multi-unit gifts show who already gave even while units are still open.
-  const label = giverLabel(gift) ?? (soldOut ? "Esgotado" : null);
+  const locked = isLocked(gift);
+  const label = locked ? "Só depois da casa" : (giverLabel(gift) ?? (soldOut ? "Esgotado" : null));
   const units = unitsLabel(gift);
   const cover = gift.photos[0];
 
@@ -33,6 +34,7 @@ export function GiftCard({ gift, order, onOpen }: Props) {
       className={styles.card}
       data-shown={seen || undefined}
       data-soldout={soldOut || undefined}
+      data-locked={locked || undefined}
       style={{ "--delay": `${(order % 3) * 90}ms` } as React.CSSProperties}
     >
       <div className={styles.dim} aria-hidden>
@@ -58,7 +60,7 @@ export function GiftCard({ gift, order, onOpen }: Props) {
         <h3 className={styles.name}>{gift.name}</h3>
         {units && <p className={styles.units}>{units}</p>}
         <p className={styles.meta}>
-          <span>{soldOut ? "Esgotado" : gift.links.map((l) => l.store).join(" · ")}</span>
+          <span>{soldOut ? "Esgotado" : locked ? "Bloqueado por enquanto" : gift.links.map((l) => l.store).join(" · ")}</span>
           <span className={styles.price}>
             {formatBRL(gift.price)}
             {gift.quantity > 1 && " cada"}

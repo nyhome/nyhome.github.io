@@ -110,6 +110,10 @@
   opacity: 0.55;
 }
 
+.card[data-locked] .photo img {
+  opacity: 0.8;
+}
+
 .card[data-soldout] .name {
   color: var(--color-text-secondary);
 }

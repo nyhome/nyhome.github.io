@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { activeIndex, visibleGifts, roomProgress, progressLabel, isSoldOut, giverLabel, unitsLabel, unitsLeft } from "./catalog.ts";
+import { activeIndex, visibleGifts, roomProgress, progressLabel, isLocked, isSoldOut, giverLabel, unitsLabel, unitsLeft } from "./catalog.ts";
 import type { Gift } from "../data/gifts.ts";
 
 const NOW = Date.UTC(2026, 10, 24, 12);
@@ -90,4 +90,18 @@ test("unitsLabel shows units and what is left, only for multi-unit gifts", () =>
 test("progressLabel reads like the spec", () => {
   assert.equal(progressLabel({ chosen: 3, total: 8 }), "3 de 8 presentes escolhidos");
   assert.equal(progressLabel({ chosen: 0, total: 1 }), "0 de 1 presente escolhido");
+});
+
+test("locked gifts: not reservable while open, listed after open ones and before sold-out ones", () => {
+  const fridge = gift("f", "cozinha", 10, { locked: true });
+  assert.equal(isLocked(fridge), true);
+  assert.equal(isLocked(gift("g", "cozinha", 10, { locked: true, ...bought() })), false);
+  const order = visibleGifts([gift("s", "sala", 1, bought()), fridge, gift("o", "sala", 99)], "todos", "todos").map((g) => g.id);
+  assert.deepEqual(order, ["o", "f", "s"]);
+});
+
+test("a partial couple purchase gets no badge while units are still open", () => {
+  const cups = gift("c", "cozinha", 10, { quantity: 2, boughtUnits: 1, givers: [{ name: "", tier: "", units: 1, byCouple: true }] });
+  assert.equal(giverLabel(cups), null);
+  assert.equal(unitsLabel(cups), "2 unidades · faltam 1");
 });

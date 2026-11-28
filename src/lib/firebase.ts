@@ -3,7 +3,7 @@ import {
   Timestamp, collection, connectFirestoreEmulator, deleteField, doc, getDoc, getDocs, getFirestore, increment, query,
   runTransaction, serverTimestamp, where, writeBatch, type DocumentData, type Firestore,
 } from "firebase/firestore/lite";
-import type { Delivery, Gift, Giver, Hold } from "@/data/gifts";
+import type { Delivery, Gift, Giver, Goal, Hold } from "@/data/gifts";
 
 // UI only: the real gate is isAdmin() in firestore.rules.
 export const ADMIN_UIDS = ["lEYtbTBbpfXaUdzz7sQq05Qz1c32", "mVGO28Yprqcc7z60fCev1GdDlTo1"];
@@ -54,6 +54,7 @@ export function toGift(id: string, d: DocumentData): Gift {
     photos: d.photos ?? [],
     status: d.status,
     hidden: d.hidden === true,
+    locked: d.locked === true,
     quantity,
     boughtUnits: d.boughtUnits ?? (d.status === "bought" ? quantity : 0),
     heldUnits: d.heldUnits ?? 0,
@@ -71,6 +72,11 @@ export async function fetchGifts(): Promise<Gift[]> {
 export async function fetchDelivery(): Promise<Delivery | null> {
   const snap = await getDoc(doc(db(), "settings", "delivery"));
   return snap.exists() ? (snap.data() as Delivery) : null;
+}
+
+export async function fetchGoal(): Promise<Goal | null> {
+  const snap = await getDoc(doc(db(), "settings", "goal"));
+  return snap.exists() ? (snap.data() as Goal) : null;
 }
 
 export const firstName = (name: string) => name.trim().split(/\s+/)[0].slice(0, 30);

@@ -6,7 +6,7 @@ import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog";
 import { Selector } from "@astryxdesign/core/Selector";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { TIERS, type Delivery, type Gift } from "@/data/gifts";
-import { HOLD_HOURS, formatBRL, giverLabel, isSoldOut, unitsLabel, unitsLeft } from "@/lib/catalog";
+import { HOLD_HOURS, LOCKED_NOTE, formatBRL, giverLabel, isLocked, isSoldOut, unitsLabel, unitsLeft } from "@/lib/catalog";
 import { reserveGift } from "@/lib/firebase";
 import { useIsNarrow } from "@/lib/hooks";
 import { CopyButton } from "./CopyButton";
@@ -54,6 +54,7 @@ function Content({ gift, delivery, onClose, onChanged }: Omit<Props, "gift"> & {
   const [busy, setBusy] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const soldOut = isSoldOut(gift);
+  const locked = isLocked(gift);
   const left = unitsLeft(gift);
   const [picked, setPicked] = useState(1);
   // After the list refreshes, fewer units may be left than the guest had picked.
@@ -151,15 +152,17 @@ function Content({ gift, delivery, onClose, onChanged }: Omit<Props, "gift"> & {
                   {gift.quantity > 1 ? "Todas as unidades já foram reservadas" : "Outro convidado reservou este presente"}. Se uma
                   compra não for confirmada em até {HOLD_HOURS} horas, ela volta para a lista.
                 </p>
+              ) : locked ? (
+                <p className={styles.reserved}>{LOCKED_NOTE}</p>
               ) : giver && gift.quantity > 1 ? (
                 <p className={styles.reserved}>{giver}. Ainda dá para dar {left === 1 ? "1 unidade" : `${left} unidades`}.</p>
               ) : null}
               <div className={styles.actions}>
                 <Button
-                  label={soldOut ? "Esgotado" : "Reservar presente"}
+                  label={soldOut ? "Esgotado" : locked ? "Bloqueado por enquanto" : "Reservar presente"}
                   variant="primary"
                   size="lg"
-                  isDisabled={soldOut}
+                  isDisabled={soldOut || locked}
                   onClick={() => setStep({ kind: "reserve" })}
                 />
               </div>
@@ -228,9 +231,14 @@ function Content({ gift, delivery, onClose, onChanged }: Omit<Props, "gift"> & {
               {name.trim() ? name.trim().split(/\s+/)[0] : "Maria"}
               {tier ? ` · ${tier}` : " · Prima"}”.
             </p>
-            {errors.form && <p className={styles.reserved} role="alert">{errors.form}</p>}
+            {/* The refreshed gift tells why the rules refused: it was locked meanwhile, not reserved by someone else. */}
+            {locked ? (
+              <p className={styles.reserved} role="alert">{LOCKED_NOTE}</p>
+            ) : (
+              errors.form && <p className={styles.reserved} role="alert">{errors.form}</p>
+            )}
             <div className={styles.actions}>
-              <Button label="Confirmar reserva" variant="primary" size="lg" type="submit" isLoading={busy} isDisabled={errors.race === String(left)} />
+              <Button label="Confirmar reserva" variant="primary" size="lg" type="submit" isLoading={busy} isDisabled={errors.race === String(left) || locked} />
               <Button label="Voltar aos detalhes" variant="ghost" size="lg" onClick={() => setStep({ kind: "details" })} />
             </div>
           </form>

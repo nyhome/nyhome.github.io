@@ -4,10 +4,10 @@ import {
   GoogleAuthProvider, connectAuthEmulator, getAuth, onAuthStateChanged, signInWithPopup, signOut, type Auth, type User,
 } from "firebase/auth";
 import {
-  Timestamp, addDoc, collection, deleteField, doc, getDocs, query, runTransaction, serverTimestamp, setDoc, updateDoc, where,
+  Timestamp, addDoc, collection, deleteField, doc, getDoc, getDocs, query, runTransaction, serverTimestamp, setDoc, updateDoc, where,
   writeBatch, type Transaction,
 } from "firebase/firestore/lite";
-import type { Delivery, Gift, GiftLink, Giver, RoomId, Voltage } from "@/data/gifts";
+import type { Delivery, Gift, GiftLink, Giver, Goal, RoomId, Voltage } from "@/data/gifts";
 import { unitsLeft } from "./catalog";
 import { EMULATOR, app, db, toGift, type Reservation } from "./firebase";
 
@@ -121,6 +121,7 @@ export const publish = (id: string) => updateDoc(doc(db(), "gifts", id), { statu
 
 /** Takes a published gift off the guests' catalog or puts it back; reservations and purchases stay as they are. */
 export const setHidden = (id: string, hidden: boolean) => updateDoc(doc(db(), "gifts", id), { hidden });
+export const setLocked = (id: string, locked: boolean) => updateDoc(doc(db(), "gifts", id), { locked });
 
 /** Closes a guest's hold as a purchase (they forgot "Já comprei") or frees it, if it is still open. */
 const closeHold = (res: Reservation, outcome: "bought" | "released") =>
@@ -150,16 +151,20 @@ const closeHold = (res: Reservation, outcome: "bought" | "released") =>
 export const markBought = (_gift: Gift, res: Reservation) => closeHold(res, "bought");
 export const releaseHold = (_gift: Gift, res: Reservation) => closeHold(res, "released");
 
-/** The couple bought the units still open; guests' holds stay as they are. */
-export const boughtByUs = (gift: Gift) =>
+/** The couple bought `wanted` of the open units (all of them by default); guests' holds stay as they are.
+ * Repeated couple purchases add up in one "nós" entry. */
+export const boughtByUs = (gift: Gift, wanted = Infinity) =>
   runTransaction(db(), async (tx) => {
     const g = await current(tx, gift.id);
-    const units = unitsLeft(g);
-    if (!units) return;
+    const units = Math.min(wanted, unitsLeft(g));
+    if (units < 1) return;
     const boughtUnits = g.boughtUnits + units;
+    const ours = g.givers.find((x) => x.byCouple);
     tx.update(doc(db(), "gifts", g.id), {
       boughtUnits,
-      givers: [...g.givers, { name: "", tier: "", units, byCouple: true } satisfies Giver],
+      givers: ours
+        ? g.givers.map((x) => (x === ours ? { ...x, units: x.units + units } : x))
+        : [...g.givers, { name: "", tier: "", units, byCouple: true } satisfies Giver],
       status: statusFor(g, boughtUnits),
     });
   });
@@ -182,3 +187,21 @@ export async function setTier(gift: Gift, res: Reservation, tier: string) {
 }
 
 export const saveDelivery = (d: Delivery) => setDoc(doc(db(), "settings", "delivery"), d);
+
+/** What each of us has saved, by uid. Admin-only (private/goal): the public settings/goal shows just the total. */
+export type GoalPeople = Record<string, { name: string; amount: number }>;
+
+export async function fetchGoalPeople(): Promise<GoalPeople> {
+  const snap = await getDoc(doc(db(), "private", "goal"));
+  return (snap.data()?.people ?? {}) as GoalPeople;
+}
+
+/** Saves my amount, the target and the place's price, and rewrites the public total from everyone's amounts. */
+export const saveGoal = (me: { uid: string; name: string }, amount: number, target: number, price: number) =>
+  runTransaction(db(), async (tx) => {
+    const snap = await tx.get(doc(db(), "private", "goal"));
+    const people: GoalPeople = { ...(snap.data()?.people ?? {}), [me.uid]: { name: me.name, amount } };
+    const saved = Object.values(people).reduce((s, p) => s + p.amount, 0);
+    tx.set(doc(db(), "private", "goal"), { people });
+    tx.set(doc(db(), "settings", "goal"), { target, saved, price } satisfies Goal);
+  });

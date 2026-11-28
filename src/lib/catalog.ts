@@ -40,7 +40,15 @@ export const isListed = (g: Gift) => g.status !== "draft" && !g.hidden;
 
 export const isSoldOut = (g: Gift) => g.status === "bought" || unitsLeft(g) === 0;
 
-/** Gifts a guest can see, by price, sold-out ones last within each room. Ranges include the lower bound only. */
+/** Waiting for the house: shown but not reservable. A gift already fully given just shows as given. */
+export const isLocked = (g: Gift) => g.locked === true && !isSoldOut(g);
+
+export const LOCKED_NOTE =
+  "Esse fica pra depois da casa: ainda não temos onde colocar itens grandes. Quando a casa sair, ele é liberado aqui na lista.";
+
+const rank = (g: Gift) => (isSoldOut(g) ? 2 : isLocked(g) ? 1 : 0);
+
+/** Gifts a guest can see, by price: open ones first, then locked, then sold out, within each room. Ranges include the lower bound only. */
 export function visibleGifts(gifts: Gift[], room: RoomId | "todos", price: PriceRangeId, sort: SortId = "menor"): Gift[] {
   const range = PRICE_RANGES.find((r) => r.id === price) ?? PRICE_RANGES[0];
   return gifts
@@ -51,7 +59,7 @@ export function visibleGifts(gifts: Gift[], room: RoomId | "todos", price: Price
         g.price >= range.min &&
         (range.max === Infinity ? true : g.price < range.max),
     )
-    .sort((a, b) => Number(isSoldOut(a)) - Number(isSoldOut(b)) || (sort === "menor" ? a.price - b.price : b.price - a.price));
+    .sort((a, b) => rank(a) - rank(b) || (sort === "menor" ? a.price - b.price : b.price - a.price));
 }
 
 /** "3 de 8 presentes escolhidos", counted in units: 3 sheet sets are 3 gifts. The couple's own count too. */
@@ -67,7 +75,8 @@ export function giverLabel(g: Gift): string | null {
     ...Object.values(g.holds).map((h) => ({ name: h.giverName, tier: h.giverTier })),
   ];
   const couple = g.givers.some((x) => x.byCouple);
-  if (!people.length) return couple ? "Comprado pelos noivos" : null;
+  // Units still open after a partial couple purchase: no badge, the units label says how many are left.
+  if (!people.length) return couple && isSoldOut(g) ? "Comprado pelos noivos" : null;
   const names = [...new Set(people.map((p) => p.name))];
   const who =
     names.length === 1

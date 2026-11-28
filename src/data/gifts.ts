@@ -43,6 +43,8 @@ export interface Gift {
   status: GiftStatus;
   /** Published but taken off the catalog by the couple (the toggle in the panel). */
   hidden?: boolean;
+  /** Listed but not reservable yet: big items (fridge, TV…) wait until we have a place to put them. */
+  locked?: boolean;
   /** Units wanted; guests each give some (one reservation per guest). Single gifts are just quantity 1. */
   quantity: number;
   boughtUnits: number;
@@ -73,6 +75,18 @@ export interface Giver {
 // Same list as VOLTAGES in scripts/api.mjs.
 export const VOLTAGES = ["127V", "220V", "Bivolt"] as const;
 export type Voltage = (typeof VOLTAGES)[number];
+
+/** Shown until the admin saves other values. */
+export const GOAL_TARGET = 200_000;
+export const GOAL_PRICE = 500_000;
+
+/** Down payment for our own place: the target, the total we have saved and the place's full price (0 = not
+ * set), in reais. */
+export interface Goal {
+  target: number;
+  saved: number;
+  price?: number;
+}
 
 export interface Delivery {
   recipient: string;

@@ -43,6 +43,7 @@ service cloud.firestore {
         let h = after.holds[hid];
         let res = getAfter(resPath(getAfter(lockPath(hid)).data.token)).data;
         return before.status == 'available'
+          && before.get('locked', false) != true
           && changed().hasOnly(['holds', 'heldUnits', 'lastHold'])
           && hid is string && !before.holds.keys().hasAny([hid]) && onlyHold(hid)
           && h.keys().hasOnly(['units', 'reservedAt', 'giverName', 'giverTier'])
@@ -143,6 +144,11 @@ service cloud.firestore {
     match /settings/{doc} {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    // Couple-only data, e.g. how much each of us has saved for the down payment.
+    match /private/{doc} {
+      allow read, write: if isAdmin();
     }
   }
 }
