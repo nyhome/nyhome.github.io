@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ROOMS } from "@/data/gifts";
 import { fetchAll, type AdminData } from "@/lib/admin";
-import { formatBRL } from "@/lib/catalog";
+import { formatBRL, formatBRLShort as compact } from "@/lib/catalog";
 import { summarize } from "@/lib/dashboard";
 import styles from "./Dashboard.module.css";
 
@@ -12,8 +12,6 @@ import styles from "./Dashboard.module.css";
 const C = { bought: "#3d6b22", reserved: "#d48f5f", track: "#e6e2d3", grid: "#ece8d9", ink3: "#8a8f7c" };
 const roomName = (id: string) => ROOMS.find((r) => r.id === id)?.name ?? id;
 const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
-const compact = (v: number) =>
-  v >= 1000 ? `R$ ${(v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil` : formatBRL(v);
 const day = (ms: number) => new Date(ms).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 
 type Tip = { x: number; y: number; lines: string[] } | null;

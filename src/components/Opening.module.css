@@ -63,15 +63,97 @@
   margin-top: -12px;
 }
 
-.goal {
-  max-width: 34ch;
-  display: grid;
-  gap: 8px;
+.kicker s {
+  text-decoration-thickness: 2px;
+  color: var(--color-text-secondary);
 }
 
-.goalText {
-  font-size: 0.9375rem;
+/* Goal ruler: the whole line is the place's price, the tinted stretch the down payment, the solid part what we have. */
+.ruler {
+  max-width: 420px;
+  padding-top: 30px;
+}
+
+.line {
+  position: relative;
+  height: 14px;
+  border-inline: 1.5px solid var(--olive);
+}
+
+.line::before {
+  content: "";
+  position: absolute;
+  inset: 50% 0 auto;
+  border-top: 1.5px solid var(--olive);
+}
+
+.entrada,
+.fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+}
+
+.entrada {
+  width: var(--entrada);
+  background: rgb(186 114 79 / 0.16);
+  border-right: 1.5px solid var(--terracotta);
+}
+
+.fill {
+  width: var(--fill);
+  background: var(--terracotta);
+}
+
+.marker {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  /* Kept inside the line so a small or full amount doesn't hang off the edge. */
+  left: clamp(32px, var(--fill), calc(100% - 32px));
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 0.85rem;
+  font-weight: 600;
+  /* Darkened terracotta: small text on sand needs 4.5:1. */
+  color: color-mix(in srgb, var(--terracotta) 72%, black);
+}
+
+.labels {
+  position: relative;
+  height: 40px;
+  margin-top: 8px;
+  font-size: 0.82rem;
+  line-height: 1.3;
   color: var(--color-text-secondary);
+}
+
+.labels span {
+  position: absolute;
+  top: 0;
+}
+
+.entradaLabel {
+  left: var(--entrada);
+  transform: translateX(-50%);
+  text-align: center;
+  color: color-mix(in srgb, var(--terracotta) 72%, black);
+}
+
+.entradaLabel[data-end] {
+  left: auto;
+  right: 0;
+  transform: none;
+  text-align: right;
+}
+
+.priceLabel {
+  right: 0;
+  text-align: right;
+}
+
+.say {
+  margin-top: 4px;
+  font-family: var(--font-family-heading);
+  font-size: 1.35rem;
 }
 
 .cta {

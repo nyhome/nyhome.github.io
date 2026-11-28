@@ -101,6 +101,10 @@ export function progressLabel({ chosen, total }: { chosen: number; total: number
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 export const formatBRL = (value: number) => brl.format(value);
 
+/** "R$ 47,5 mil" from R$ 1.000 up, the full value below. */
+export const formatBRLShort = (v: number) =>
+  v >= 1000 ? `R$ ${(v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil` : formatBRL(v);
+
 export function photoUrl(id: string, width: number): string {
   return `https://images.unsplash.com/photo-${id}?w=${width}&q=75&auto=format&fit=crop`;
 }

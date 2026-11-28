@@ -3,9 +3,8 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@astryxdesign/core/Button";
-import { ProgressBar } from "@astryxdesign/core/ProgressBar";
 import { GOAL_PRICE, GOAL_TARGET, OPENING_PHOTO, type Goal } from "@/data/gifts";
-import { formatBRL } from "@/lib/catalog";
+import { formatBRL, formatBRLShort } from "@/lib/catalog";
 import { fetchGoal } from "@/lib/firebase";
 import { useIsNarrow, useReducedMotion, useScrollProgress } from "@/lib/hooks";
 import styles from "./Opening.module.css";
@@ -36,7 +35,9 @@ export function Opening() {
           />
         </figure>
         <div className={styles.invite}>
-          <p className={styles.kicker}>Não é chá de casa nova, é chá de casa própria</p>
+          <p className={styles.kicker}>
+            Chá de casa <s>nova</s> própria
+          </p>
           <h1 id="casal" className={styles.names}>
             Nathália <span className={styles.amp}>&amp;</span> Yago
           </h1>
@@ -48,27 +49,53 @@ export function Opening() {
             Ninguém precisa dar nada. Mas, como muita gente se ofereceu: se bater a vontade de ajudar, com qualquer
             valor, fique à vontade e fale com a gente. Sem pedido e sem cobrança, tá?
           </p>
-          {goal && goal.target > 0 && (
-            <div className={styles.goal}>
-              <ProgressBar
-                label="Meta da entrada da casa própria"
-                value={Math.min(goal.saved, goal.target)}
-                max={goal.target}
-                hasValueLabel
-              />
-              <p className={styles.goalText}>
-                {goal.saved >= goal.target
-                  ? `Entrada garantida: ${formatBRL(goal.target)}!`
-                  : `Faltam ${formatBRL(goal.target - goal.saved)} de ${formatBRL(goal.target)}`}
-                {!!goal.price && <><br />Imóvel de até {formatBRL(goal.price)}</>}
-              </p>
-            </div>
-          )}
+          {goal && goal.target > 0 && <GoalRuler goal={goal} />}
           <div className={styles.cta}>
             <Button label="Espiar a lista" variant="primary" size="lg" href="#ambientes" />
           </div>
         </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * The down payment as a stretch of the place's price, drawn like the dimension line on the gift cards. Without a
+ * price the line is just the down payment.
+ */
+function GoalRuler({ goal }: { goal: Goal }) {
+  const { target, saved } = goal;
+  const whole = Math.max(goal.price || 0, target);
+  const pct = (v: number) => `${(Math.min(v, whole) / whole) * 100}%`;
+  const done = saved >= target;
+  return (
+    <div
+      className={styles.ruler}
+      style={{ "--entrada": pct(target), "--fill": pct(Math.min(saved, target)) } as React.CSSProperties}
+      role="img"
+      aria-label={`Juntamos ${formatBRL(saved)} de ${formatBRL(target)} de entrada${goal.price ? `, num imóvel de até ${formatBRL(goal.price)}` : ""}`}
+    >
+      <div className={styles.line}>
+        <span className={styles.entrada} />
+        <span className={styles.fill} />
+        {saved > 0 && <span className={styles.marker}>{formatBRLShort(saved)}</span>}
+      </div>
+      <div className={styles.labels} aria-hidden>
+        <span>R$ 0</span>
+        <span className={styles.entradaLabel} data-end={whole === target || undefined}>
+          entrada
+          <br />
+          {formatBRLShort(target)}
+        </span>
+        {whole > target && (
+          <span className={styles.priceLabel}>
+            imóvel
+            <br />
+            até {formatBRLShort(whole)}
+          </span>
+        )}
+      </div>
+      <p className={styles.say}>{done ? `Entrada garantida: ${formatBRL(target)}!` : `Faltam ${formatBRL(target - saved)} pra entrada.`}</p>
+    </div>
   );
 }
