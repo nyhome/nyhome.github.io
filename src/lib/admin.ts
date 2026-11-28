@@ -152,14 +152,15 @@ export const markBought = (_gift: Gift, res: Reservation) => closeHold(res, "bou
 export const releaseHold = (_gift: Gift, res: Reservation) => closeHold(res, "released");
 
 /** The couple bought `wanted` of the open units (all of them by default); guests' holds stay as they are.
- * Each of us gets our own entry (by first name), and repeated purchases add up in it. */
+ * Each of us gets our own entry ("noivo" / "noiva"), and repeated purchases add up in it. */
 export const boughtByUs = (gift: Gift, wanted = Infinity) =>
   runTransaction(db(), async (tx) => {
     const g = await current(tx, gift.id);
     const units = Math.min(wanted, unitsLeft(g));
     if (units < 1) return;
     const boughtUnits = g.boughtUnits + units;
-    const me = auth().currentUser?.displayName?.trim().split(/\s+/)[0] ?? "";
+    // shortcut: told apart by the Google account's first name; switch to a uid map if a name ever changes.
+    const me = auth().currentUser?.displayName?.trim().split(/\s+/)[0] === "Yago" ? "noivo" : "noiva";
     const ours = g.givers.find((x) => x.byCouple && x.name === me);
     tx.update(doc(db(), "gifts", g.id), {
       boughtUnits,

@@ -68,17 +68,17 @@ export function roomProgress(gifts: Gift[], room: RoomId): { chosen: number; tot
   return { chosen: inRoom.reduce((n, g) => n + g.boughtUnits, 0), total: inRoom.reduce((n, g) => n + g.quantity, 0) };
 }
 
-/** Which of us bought it: "Yago", "Yago e Nathália"; null when no name was recorded. */
-const coupleNames = (g: Gift) => {
-  const names = [...new Set(g.givers.filter((x) => x.byCouple && x.name).map((x) => x.name))];
-  return names.length ? names.join(" e ") : null;
+/** Which of us bought it: "o" (noivo), "a" (noiva) or "os" (both, or not recorded). Used as "pel<o> noiv<o>". */
+const coupleArticle = (g: Gift) => {
+  const roles = new Set(g.givers.filter((x) => x.byCouple).map((x) => x.name));
+  return roles.size === 1 && roles.has("noivo") ? "o" : roles.size === 1 && roles.has("noiva") ? "a" : "os";
 };
 
 /** Only we bought it so far, nobody else has given or is holding it (the badge gets the couple's color). */
 export const boughtByCoupleOnly = (g: Gift) =>
   g.givers.length > 0 && g.givers.every((x) => x.byCouple) && Object.keys(g.holds).length === 0;
 
-/** Who is giving it, bought or on hold: "Presente de Maria · Prima", "Presente de Maria e João", "Yago comprou". */
+/** Who is giving it, bought or on hold: "Presente de Maria · Prima", "Presente de Maria e João", "Comprado pelo noivo". */
 export function giverLabel(g: Gift): string | null {
   const people = [
     ...g.givers.filter((x) => !x.byCouple).map((x) => ({ name: x.name, tier: x.tier })),
@@ -86,11 +86,9 @@ export function giverLabel(g: Gift): string | null {
   ];
   const couple = g.givers.some((x) => x.byCouple);
   // Units still open after a partial couple purchase: no badge, the units label says how many are left.
-  const us = coupleNames(g);
-  if (!people.length) {
-    if (!couple || !isSoldOut(g)) return null;
-    return us ? `${us} ${us.includes(" e ") ? "compraram" : "comprou"}` : "Comprado pelos noivos";
-  }
+  const a = coupleArticle(g);
+  const noivos = a === "os" ? "noivos" : `noiv${a}`;
+  if (!people.length) return couple && isSoldOut(g) ? `Comprado pel${a} ${noivos}` : null;
   const names = [...new Set(people.map((p) => p.name))];
   const who =
     names.length === 1
@@ -98,7 +96,7 @@ export function giverLabel(g: Gift): string | null {
       : names.length === 2
         ? `${names[0]} e ${names[1]}`
         : `${names[0]}, ${names[1]} e mais ${names.length - 2}`;
-  return `Presente de ${who}${couple ? (us ? ` e de ${us}` : " e dos noivos") : ""}`;
+  return `Presente de ${who}${couple ? ` e d${a} ${noivos}` : ""}`;
 }
 
 /** "3 unidades · faltam 2"; null for single gifts. */
