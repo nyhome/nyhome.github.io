@@ -80,6 +80,14 @@ test("giverLabel names givers and holders, or marks the couple's own purchase", 
   assert.equal(giverLabel(two), "Presente de Ana · Tia e dos noivos");
 });
 
+test("giverLabel says which of us bought it", () => {
+  const by = (...names: string[]) => names.map((name) => ({ name, tier: "", units: 1, byCouple: true }));
+  assert.equal(giverLabel(gift("a", "sala", 1, bought({ givers: by("Yago") }))), "Yago comprou");
+  assert.equal(giverLabel(gift("a", "sala", 1, bought({ quantity: 2, boughtUnits: 2, givers: by("Yago", "Nathália") }))), "Yago e Nathália compraram");
+  const mixed = gift("s", "quarto", 1, { quantity: 2, givers: [{ name: "Ana", tier: "Tia", units: 1 }, ...by("Yago")] });
+  assert.equal(giverLabel(mixed), "Presente de Ana · Tia e de Yago");
+});
+
 test("unitsLabel shows units and what is left, only for multi-unit gifts", () => {
   assert.equal(unitsLabel(gift("a", "sala", 1)), null);
   assert.equal(unitsLabel(gift("s", "quarto", 1, { quantity: 3 })), "3 unidades");

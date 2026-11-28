@@ -224,7 +224,7 @@ function Row({
         </span>
         {g.givers.length > 0 && (
           <span className={styles.muted}>
-            Deram: {g.givers.map((x) => (x.byCouple ? "nós" : `${x.name} (${x.tier})`) + (multi ? ` ×${x.units}` : "")).join(", ")}
+            Deram: {g.givers.map((x) => (x.byCouple ? x.name || "nós" : `${x.name} (${x.tier})`) + (multi ? ` ×${x.units}` : "")).join(", ")}
           </span>
         )}
         {g.links.length > 0 && (

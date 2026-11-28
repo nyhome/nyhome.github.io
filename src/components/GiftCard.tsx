@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import { Button } from "@astryxdesign/core/Button";
 import type { Gift } from "@/data/gifts";
-import { formatBRL, giverLabel, isLocked, isSoldOut, unitsLabel } from "@/lib/catalog";
+import { boughtByCoupleOnly, formatBRL, giverLabel, isLocked, isSoldOut, unitsLabel } from "@/lib/catalog";
 import { useSeenOnce, hide } from "@/lib/hooks";
 import styles from "./GiftCard.module.css";
 
@@ -51,7 +51,7 @@ export function GiftCard({ gift, order, onOpen }: Props) {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         {cover && <img src={cover} alt={gift.name} referrerPolicy="no-referrer" loading="lazy" onError={hide} />}
         {label && (
-          <span className={styles.badge} data-couple={label === "Comprado pelos noivos" || undefined}>
+          <span className={styles.badge} data-couple={(!locked && boughtByCoupleOnly(gift)) || undefined}>
             {label}
           </span>
         )}
